@@ -61,10 +61,22 @@ whip_ik <-whip_ik %>%
 
 whip_ik_short<-whip_ik%>%
   select(c(sample,Cruise,Year,Date,Time,Site,Latitude,Longitude,Habitat,Gear,vol.m3,tow.length,depth,dist.shore,temp.1m,sal.1m))
+whip_ik_short<-whip_ik_short%>%
+  mutate("chla"=NA) %>%
+  mutate("chltot"=NA)%>%
+  mutate("Platform"="ship")%>%
+  mutate("mechanism"=NA) %>%
+  unite("DateTime",c(Date, Time),sep=" ",remove=F)%>%
+  mutate("Transect"=NA)%>%
+  mutate("fluo.1m"=NA)
+whip_ik_short<-mutate(whip_ik_short, "DateTime"=ymd_hms(DateTime))
 str(whip_ik_short)
 slick_whole_short <- slick_whole_short %>%
   mutate("depth"=as.character(depth))
 
-whip_slick_short<-left_join(slick_whole_short, whip_ik_short)
-######
+whip_slick_short<-rbind(slick_whole_short, whip_ik_short)
 str(whip_slick_short)
+whip_slick_short$mechanism<-NULL
+whip_slick_short<-whip_slick_short%>%
+  mutate("is_slick"= replace(Habitat, "Inside" == "Slick", "Outside"== "Ambient"))
+#make Habitat values consistent (inside/ouside vs ambient/slick)
