@@ -41,9 +41,9 @@ slick_var <-slick_var %>%
 #if you want to merge the full dataset, skip this next step with select()
 slick_var_short <-slick_var %>%
   select(Transect, sample, temp.1m, sal.1m, fluo.1m, chla, chltot)
-slick_whole_short<-full_join(slick, slick_var_short, by=Transect) #join by transect number (not sample)
+slick_whole_short<-full_join(slick, slick_var_short, by = join_by(Transect, sample)) #join by transect number (not sample)
 
-#join slick and whip#####
+#prep whip#####
 str(slick_whole_short)
 str(whip)
 whip_ik<- whip %>%
@@ -56,13 +56,13 @@ whip_ik <-whip_ik %>%
   mutate("Latitude"=LAT_DD_start) %>%
   mutate("Longitude"=LONG_DD_start) %>%
   mutate("dist.shore"=Dist2Shore_km) %>%
-  mutate("temp.1m"=coalesce(sst.mean.tsg, as.numeric(Surface.Temp))) %>%
-  mutate("sal.1m"=coalesce(sss.mean.tsg, as.numeric(Surface.Salinity))) %>%
+  mutate("temp.1m"=coalesce(sst.mean.tsg, as.numeric(Surface.Temp)),keep = "none") %>%
+  mutate("sal.1m"=coalesce(sss.mean.tsg, as.numeric(Surface.Salinity)),keep = "none") %>%
   mutate("Time"= parse_time(str_pad(as.character(Time.start), 4, pad = "0"), "%H%M"))%>%
   mutate("Time.end"= parse_time(str_pad(as.character(Time.end), 4, pad = "0"), "%H%M"))%>%
   mutate("sample"=as.numeric(Station))%>%
   mutate("Gear"=gear) %>% 
-  mutate("speed.kts"=coalesce(speed.kts, tow.sog.kt,tow.sog.mean.scs.kt)) %>%
+  mutate("speed.kts"=coalesce(speed.kts, tow.sog.kt,tow.sog.mean.scs.kt),keep = "none") %>%
   mutate("Site"=as.character(Sample)) %>%
   mutate("calc.speed.knts"=((tow.length/(tow.duration*60))*1.944))
 #QC compare calculated to written speed values
@@ -73,39 +73,34 @@ whip_ik_short<-whip_ik%>%
   select(!(c(direction, slick.og, slick.paper, slick.cromwell, slick.chck, 
              Processed.count, pair.ID, tow.sog.kt, paravane, Tow.type,#(pull out notes elements then drop??)
              Fish.removed, #(keep for unabridged version, drop for public one)
-             TL, LJFL,EFL,weight,eggs,flag,OBJECTID,Notes.joey,FLAG, Total.Fish.Larvae, Fish.eggs,Fish.eggs.large, 
-              paper.notes, Tow.type.1, Gear.paper, tow.length))) #leave all iterations of lat, long in
+             mechanism,TL, LJFL,EFL,weight,eggs,flag,OBJECTID,Notes.joey,FLAG,Year, Month,Day,
+             Total.Fish.Larvae, Fish.eggs,Fish.eggs.large, remove,remove.flag, UID_tran,
+             paper.notes, Tow.type.1, Gear.paper, tow.length))) #leave all iterations of lat, long in
 
 whip_ik_short<-whip_ik_short%>%
-  filter(whip_ik_short,depth !="midwater")%>%
+  filter(depth !="midwater")%>%
   mutate("chla"=NA) %>%
   mutate("chltot"=NA)%>%
   mutate("Platform"="ship")%>%
   mutate("mechanism"=NA) %>%
-  unite("DateTime",c(Date, Time),sep=" ",remove=F)%>%
   mutate("Transect"=NA)%>%
-  mutate("fluo.1m"=NA)%>%
-whip_ik_short<-mutate(whip_ik_short, "DateTime"=ymd_hms(DateTime))
+  mutate("fluo.1m"=NA)
 str(whip_ik_short)
 
-slick_whole_short <- slick_whole_short %>%
-  mutate("speed.knts"=NA)%>%
-  mutate("remove.flag"=NA) %>%
-  mutate("calc.speed.knts"=NA)
-  
-  
-##maybe automate this with a for loop?? 
-  #for( i in seq_along(column name list)){
-  #for col name in whip_ik not in slick_whole_short, create NA column in slick whole_short
-  #column name[[i]]$SampleID <- rep(ID[i],nrow(filelist[[i]]))
+#join slick and whip#######
+diff_list<-setdiff(colnames(whip_ik_short),colnames(slick_whole_short)) #in whip not in slick
+diff_list
+slick_whole_short[,diff_list] <- NA
+diff_list2<-setdiff(colnames(slick_whole_short),colnames(whip_ik_short)) #in slick not in whip
+whip_ik_short[,diff_list2] <- NA
 
-#}
+combo_whip_slick_short<-rbind(slick_whole_short, whip_ik_short)
+combo_whip_slick_short<-combo_whip_slick_short%>%
+  mutate("is_slick"= replace(Habitat, "Inside" == "Slick", "Outside"== "Ambient")) #make Habitat values consistent (inside/ouside vs ambient/slick)
 
-
-whip_slick_short<-rbind(slick_whole_short, whip_ik_short)
-str(whip_slick_short)
-whip_slick_short$mechanism<-NULL
-whip_slick_short<-whip_slick_short%>%
-  mutate("is_slick"= replace(Habitat, "Inside" == "Slick", "Outside"== "Ambient"))
-
-#make Habitat values consistent (inside/ouside vs ambient/slick)
+#continue to coalesce duplicates across new df#####
+str(combo_whip_slick_short)
+#write.csv(combo_whip_slick_short,"C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short.csv",row.names = F)
+#see about coalesceing these with whip once merged
+#unite("DateTime.old",c(Date, Time),sep=" ",remove=F)%>%
+#mutate("DateTime"=ymd_hms(DateTime.old))%>% 
