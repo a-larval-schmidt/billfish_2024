@@ -20,6 +20,7 @@ slick_var<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/SlickVariables_
 whip<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/WHIP_TowMetadata_20220923 - WHIP_TowMetadata.csv")
 
 #join slick+slick var####
+#prep slick
 str(slick_var)
 
 slick<-slick %>%
@@ -37,53 +38,23 @@ slick<-slick %>%
   mutate("mesh"=ifelse(Platform== "Small Boat","335um","505um"))%>%
   mutate("gear"=ifelse(Platform== "Small Boat","1m straight-conical ring-net","6'IK"))%>%
   mutate("Sample"=sample, .keep="all")
-
-missing_list<-c("Time.end","LAT_DD_end","LONG_DD_end","LAT_DD_mid","LONG_DD_mid", "Dist2Shore_km") 
+missing_list<-c("Time.end","LAT_DD_end","LONG_DD_end","LAT_DD_mid","LONG_DD_mid","Dist2Shore_km","distance","coord","end.lon","end.lat") 
 slick[,missing_list] <- NA
-         
-ggplot(slick, aes(x=Transect, y=tow.length, color=sample))+geom_point() #multiple samples/transect
-goop<-group_by(slick, Transect, sample)
-#need lat long from Jon for transects 53-59
 
+#prep slick var##
 str(slick_var)
 slick_var <-slick_var %>%
   rename("Transect"=tran) %>%
   rename("Site"=site)
-slick_var_short <-slick_var %>%select(Transect, sample, temp.1m, sal.1m, fluo.1m, chla, chltot)#if you want to merge the full dataset, skip this next step with select()
 
+slick_var_short <-slick_var %>%dplyr::select(Transect, sample, temp.1m, sal.1m, fluo.1m, chla, chltot)#if you want to merge the full dataset, skip this next step with select()
+
+#merge slick and slick_var##
 slick_whole_short<-full_join(slick, slick_var_short, by = join_by(Transect, sample)) #join by transect number (not sample)
 str(slick_whole_short)
 
-# #SKIP for nowcam's map code plus stack overflow for dist2shore####
-# library(sp) #already in raster
-# library(raster)# error
-# library(ggplot2)
-# library(scales)
-# library(rgdal)
-# library(marmap)
-# library(maps)
-# library(rnaturalearth)
-# library(rnaturalearthdata)
-# library(rgeos)
-# library(viridis)
-# library(ggplot2)
-# library(raster)
-# library(ggnewscale)
-# library(sf)
-# world<-ne_countries(scale="medium", returnclass = "sf")
-# oahu_raster <- raster(file.path("C:/Users/Andrea.Schmidt/Documents/M&B_larval_dist_csvs/all_hi_bathy.tiff"))
-# oahu_df <- fortify(as.bathy(oahu_raster))
-# str(oahu_df)
-# land_df<-filter(oahu_df, 10>z| z>-5)
-# d1_sf <- slick %>% st_as_sf(coords = c('long_start','lat_start'))
-# dist <- geosphere::dist2Line(p = st_coordinates(d1_sf), 
-#                              line = as(land_df,'Spatial'))
-# 
-# slick_whole_short_dist<-slick_whole_short %>%
-#   mutate("Dist2Shore_km"=)
-# 
-# 
-# 
+#slick_whole_short<-slick_whole_short %>%mutate("Dist2Shore_km"=as.numeric(distance), .keep="unused")
+
 #prep whip#####
 str(whip)
 whip_ik<- whip %>%
@@ -117,20 +88,53 @@ whip_ik<-whip_ik2%>%
 
 #what parts of WHIP dataset do we really want? would it be easier to exclude the vales that we do not want?
 whip_ik_short<-whip_ik%>%
-  select(!(c(direction, slick.og, slick.paper, slick.cromwell, slick.chck, 
+  dplyr::select(!(c(direction, slick.og, slick.paper, slick.cromwell, slick.chck, 
              Processed.count, pair.ID, paravane, Tow.type,#(pull out notes elements then drop??)
              Fish.removed,Notes, #(keep for unabridged version, drop for public one)
              TL, LJFL,EFL,weight,eggs,flag,OBJECTID,Notes.joey,FLAG,Month,Day,
              Total.Fish.Larvae, Fish.eggs,Fish.eggs.large,remove.flag, UID_tran,
              paper.notes, Tow.type.1, Gear.paper))) #leave all iterations of lat, long in
+#marmap dist2iso plus cam's map code for dist2shore#####
+library(sp) #already in raster
+library(raster)# error
+library(ggplot2)
+library(scales)
+library(rgdal)
+library(marmap)
+library(maps)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(rgeos)
+library(viridis)
+library(ggplot2)
+library(raster)
+library(ggnewscale)
+library(sf)
+world<-ne_countries(scale="medium", returnclass = "sf")
+oahu_raster <- raster(file.path("C:/Users/Andrea.Schmidt/Documents/M&B_larval_dist_csvs/all_hi_bathy.tiff"))
+oahu_bath<-as.bathy(oahu_raster)
+oahu_df <- fortify(oahu_bath)
+str(oahu_df) #x=long, y=lat
+woah<-dist2isobath(oahu_bath, as.numeric(na.omit(whip_ik_short$long_start)), as.numeric(na.omit(whip_ik_short$lat_start)), isobath = -5)
+woah<-woah %>%
+  rename("long_start"=start.lon)%>%
+  rename("lat_start"=start.lat) %>%
+  unite("coord", c(long_start,lat_start), sep=",", remove=T)
+whip_ik_short_dist <- whip_ik_short %>%
+  unite("coord", c(long_start,lat_start), sep=",", remove=F)
 
-whip_ik_short<-whip_ik_short%>%
+whip_ik_short_dist<-full_join(woah,whip_ik_short_dist, by=join_by(coord),relationship = "many-to-many")
+#need lat long from Jon for transects 53-59
+
+
+whip_ik_short<-whip_ik_short_dist%>%
   mutate("chla"=NA) %>%
   mutate("chltot"=NA)%>%
   mutate("Platform"="ship")%>%
   mutate("mechanism"=NA) %>%
   mutate("Transect"=NA)%>%
-  mutate("fluo.1m"=NA)
+  mutate("fluo.1m"=NA)%>%
+  mutate("Dist2Shore_km"=coalesce(Dist2Shore_km,(distance/1000)))
 str(whip_ik_short)
 
 #DRE START HERE: join slick and whip#######
@@ -140,7 +144,6 @@ diff_list2<-setdiff(colnames(slick_whole_short),colnames(whip_ik_short)) #in sli
 diff_list2
 #this was bad because it set the existing column names to NA: whip_ik_short[,diff_list2] <- NA
 #this was bad because it set the existing column names to NA: slick_whole_short[,diff_list] <- NA
-slick_whole_short<-slick_whole_short_dist
 
 combo_whip_slick_short<-rbind(slick_whole_short, whip_ik_short)
 combo_whip_slick_short<-combo_whip_slick_short%>%
