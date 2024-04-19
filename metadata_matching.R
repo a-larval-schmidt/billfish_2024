@@ -18,7 +18,9 @@ library(geosphere)
 slick<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/TransectMetadata_Whitneyetal2020_SuppTableS6.csv")
 slick_var<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/SlickVariables_Compile_2016-2017_100tran_20181003.csv")
 whip<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/WHIP_TowMetadata_20220923 - WHIP_TowMetadata.csv")
-
+length(unique(slick$sample))
+length(unique(whip$Sample))
+length(unique(whip$Station))
 #join slick+slick var####
 #prep slick
 str(slick_var)
@@ -37,7 +39,9 @@ slick<-slick %>%
   mutate("tow.speed.kts"=(4/1.852))%>%#from nature pub, converted to knots
   mutate("mesh"=ifelse(Platform== "Small Boat","335um","505um"))%>%
   mutate("gear"=ifelse(Platform== "Small Boat","1m straight-conical ring-net","6'IK"))%>%
-  mutate("Sample"=sample, .keep="all")
+  mutate("Sample"=sample, .keep="all")%>%
+  unite("transect_sample_habitat", c(Cruise,Transect,sample,Habitat), sep="_", remove=F)
+
 missing_list<-c("Time.end","LAT_DD_end","LONG_DD_end","LAT_DD_mid","LONG_DD_mid","Dist2Shore_km","distance","coord","end.lon","end.lat") 
 slick[,missing_list] <- NA
 
@@ -57,15 +61,19 @@ str(slick_whole_short)
 
 #prep whip#####
 str(whip)
+length(unique(whip$Sample))
 whip_ik<- whip %>%
   filter(str_detect(Tow.type, "6' IK|paravane"))
+length(unique(whip_ik$Sample))
 #make whip names consistent with slick names
+whip_ik <-whip_ik %>%
+  mutate("Habitat"=ifelse(slick== "Inside","Slick","Ambient"),.keep="unused")
+  
 whip_ik2 <-whip_ik %>%
   filter(depth !="midwater")%>%
   mutate("tow.depth.category"=depth, .keep="all")%>%
   mutate("Date"=mdy(Date)) %>%
   mutate("tow.length"=(Length_km*1000),.keep = "unused") %>%
-  mutate("Habitat"=slick, .keep = "unused") %>%
   mutate("lat_start"=LAT_DD_start,.keep = "unused" ) %>%
   mutate("long_start"=LONG_DD_start,.keep = "unused") %>%
   mutate("dist.shore"=Dist2Shore_km*1000) %>%
@@ -73,12 +81,16 @@ whip_ik2 <-whip_ik %>%
   mutate("sal.1m"=coalesce(sss.mean.tsg, as.numeric(Surface.Salinity)),.keep = "unused") %>%
   mutate("Time"= parse_time(str_pad(as.character(Time.start), 4, pad = "0"), "%H%M"))%>%
   mutate("Time.end"= parse_time(str_pad(as.character(Time.end), 4, pad = "0"), "%H%M"))%>%
-  mutate("sample"=as.numeric(Station),.keep="all")%>%
+  mutate("sample"=as.numeric(Sample),.keep="all")%>% #from v2 to v3 sample was as.numeric(station) is now as.numeric(Sample)
+  mutate("Station"=as.numeric(Station),.keep="all")%>%
+  unite("transect_sample_habitat",c(Cruise,UID_tran,sample,Habitat),sep = "_", remove=F)%>%
   mutate("Gear"=gear) %>% 
   mutate("tow.speed.kts"=coalesce(tow.sog.kt,tow.sog.mean.scs.kt,speed.kts),.keep = "unused") %>%
   mutate("Site"=as.character(Sample)) %>%
   mutate("calc.speed.knts"=((tow.length/(tow.duration*60))*1.944))%>% #use dist.gps, duration (coverted to seconds)= m/s *1.944 to get speed in knts
   unite("DateTime.old",c(Date, Time),sep=" ",remove = F)
+
+length(unique(whip_ik2$Sample))
 
 whip_ik<-whip_ik2%>%
   mutate("tow.speed.kts"=coalesce(calc.speed.knts,tow.speed.kts),.keep = "unused") %>%
@@ -133,8 +145,8 @@ whip_ik_short<-whip_ik_short_dist%>%
   mutate("Platform"="ship")%>%
   mutate("mechanism"=NA) %>%
   mutate("Transect"=NA)%>%
-  mutate("fluo.1m"=NA)%>%
-  mutate("Dist2Shore_km"=coalesce(Dist2Shore_km,(distance/1000)))
+  mutate("fluo.1m"=NA)#%>%
+  #mutate("Dist2Shore_km"=coalesce(Dist2Shore_km,(distance/1000)))
 str(whip_ik_short)
 
 #DRE START HERE: join slick and whip#######
@@ -151,8 +163,45 @@ combo_whip_slick_short<-combo_whip_slick_short%>%
 
 #continue to coalesce duplicates across new df#####
 combo_whip_slick_short<-combo_whip_slick_short%>%
-  dplyr::select(!c("distance","coord","end.lon","end.lat"))
+  dplyr::select(!c("distance","coord","end.lon","end.lat", "mechanism", "Dist2Shore_km", "gear", "Sample","is_slick"))
+  
 str(combo_whip_slick_short)
 
-#write.csv(combo_whip_slick_short,"C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short.csv",row.names = F)
+#write.csv(combo_whip_slick_short,"C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short3.csv",row.names = F)
 #see about coalesceing these with whip once merged
+#check for 1704 tsg data#####
+combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short2.csv")
+#combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short3.csv")
+
+summary(combo)
+glimpse(combo)
+#insight::export_table(summary(combo),format="html")
+
+#map sampling sites
+world<-ne_countries(scale="medium", returnclass = "sf")
+#oahu_raster <- raster(file.path("C:/Users/Andrea.Schmidt/Documents/M&B_larval_dist_csvs/all_hi_bathy.tiff"))
+oahu_raster <- raster(file.path("C:/Users/Andrea.Schmidt/Desktop/for offline/billfish_hi_bathy.tiff")) #ETPO_2022(Bedrock) from https://www.ncei.noaa.gov/maps/bathymetry
+oahu_df <- fortify(as.bathy(oahu_raster))
+str(oahu_df)
+oahu_map <- ggplot(data=world) +
+  #coord_sf(crs = oahu_raster@crs,xlim=c(-161.5,-154.5),ylim=c(18.85,22.29)) +
+  geom_raster(data = oahu_df, aes(x = x, y = y, fill = z)) +labs(fill = "Depth (m)")+
+  #scale_fill_gradientn(colours = c(grey(50/100), grey(80/100)),values = rescale(c(min(oahu_df$z, na.rm = TRUE), 0,  0.0001, max(oahu_df$z, na.rm = TRUE))), na.value = "transparent",guide = "none")+
+  scale_fill_gradient(high = "lightskyblue1", low = "cornflowerblue",limits=c(-6000,0))+new_scale_fill()+
+  theme(panel.background=element_blank(), panel.grid.major.x=element_line())+
+  theme_void()+geom_sf()+coord_sf(xlim=c(-152.5,-161.5), ylim=c(18.5, 22.5))#+
+#theme(legend.title=element_text(size=16),legend.text=element_text(size=14),legend.direction = "vertical", legend.box = "vertical")+
+#scale_x_continuous(breaks=seq(-155, -161, 1))+
+#scale_y_continuous(breaks = seq(18.5,22.3,1))
+oahu_map+geom_point(data=combo, aes(y=lat_start, x=long_start, color=Year))+scale_color_viridis_c(option="F")
+
+
+#kona zoom
+kona_map <- ggplot(data=world) +
+  geom_raster(data = oahu_df, aes(x = x, y = y, fill = z)) +labs(fill = "Depth (m)")+
+  scale_fill_gradient(high = "lightskyblue1", low = "cornflowerblue",limits=c(-6000,0))+new_scale_fill()+
+  theme(panel.background=element_blank(), panel.grid.major.x=element_line())+
+  theme_void()+geom_sf()+coord_sf(xlim=c(-154.8,-158), ylim=c(18.8, 20.3))
+kona_map+geom_point(data=combo, aes(y=lat_start, x=long_start, color=Year))+scale_color_viridis_c(option="F")
+
+kona_map+geom_point(data=combo, aes(y=lat_start, x=long_start))
