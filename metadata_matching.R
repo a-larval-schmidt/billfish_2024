@@ -63,7 +63,7 @@ slick<-slick %>%
   mutate("gear"=ifelse(Platform== "Small Boat","1m straight-conical ring-net","6'IK"))%>%
   mutate("Sample"=sample, .keep="all")%>%
   unite("transect_sample_habitat", c(Cruise,Transect,sample,Habitat), sep="_", remove=F)%>%
-  mutate("Station"=as.numeric(Site),.keep="unused")%>%
+  mutate("Station"=as.numeric(Sample),.keep="all")%>%
   unite("Site", c(Cruise, sample), sep="-", remove = F)
 
 
@@ -112,7 +112,7 @@ whip_ik2 <-whip_ik %>%
   mutate("Time.end"= parse_time(str_pad(as.character(Time.end), 4, side="left", pad = "0"), "%H%M"))%>% 
   mutate("Time"= parse_time(str_pad(as.character(Time.start), 4, side="left", pad = "0"), "%H%M"))%>% 
   mutate("Time.start"= Time, .keep="all")%>% 
-  mutate("sample"=as.numeric(Sample),.keep="all")%>% #from v2 to v3 sample was as.numeric(station) is now as.numeric(Sample)
+  mutate("sample"=Sample,.keep="all")%>% #from v2 to v3 sample was as.numeric(station) is now as.numeric(Sample)
   mutate("Station"=as.numeric(Station),.keep="all")%>%
   unite("transect_sample_habitat",c(Cruise,UID_tran,sample,Habitat),sep = "_", remove=F)%>%
   mutate("Gear"=gear) %>% 
@@ -190,11 +190,11 @@ str(combo_whip_slick_short)
 #DONEtransect_sample_habitat can go away, done line 175
 #DONEfix tow volume for bad coordinate stations, done, written in document
 #DONEfor cruises where lat long is NA use mid lat long! DONE, lines 99,100
-#write.csv(combo_whip_slick_short,"C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short10.csv",row.names = F)
+#write.csv(combo_whip_slick_short,"C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv",row.names = F)
 
 #check for 1704 tsg data#####
-combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short9.csv")
-
+combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short10.csv")
+str(combo)
 summary(combo)
 glimpse(combo)
 #insight::export_table(summary(combo),format="html")
