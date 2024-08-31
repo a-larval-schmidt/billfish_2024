@@ -17,14 +17,14 @@ bff<- bf %>%
 bff %>%
   group_by(taxa)%>%
   summarize(sum(frequency),na.rm=TRUE) #this is seems correct, fewer counts than length measurements are available for
-xg<-bf %>%
+xg<-bff %>%
   filter(taxa=="Xiphias gladius")
 xg$X100m<-NULL #taking out 100mm length individuals because they get confused with 10 since I'm using substr. If a clearner method to separate out length values is found 100mm should be added back in
-#xgg<-xg %>%transform(useless = substr(lengthy, 1, 1), length_hist = substr(lengthy, 2, 3), l_unit=substr(4,6,stop=6))%>%mutate("length"=as.numeric(length_hist))%>%unique(xgg$vial)
-minix<-xg%>%
-  group_by(sample)%>%
-  summarize(sum(count),na.rm=TRUE)
-  
+xgg<-xg %>%transform(useless = substr(lengthy, 1, 1), length_hist = substr(lengthy, 2, 3), l_unit=substr(4,6,stop=6))%>%mutate("length"=as.numeric(length_hist))#%>%unique(xgg$vial)
+xg%>%
+  group_by(cruise)%>%
+  summarize(sum(count),na.rm=TRUE) #why is this SO incorrect??
+ 
 #plots###########
 ggplot(data=xgg, aes(x=length, y=freq))+geom_point()
 ggplot(data=xgg, aes(x=Year, y=count.sum))+geom_point()

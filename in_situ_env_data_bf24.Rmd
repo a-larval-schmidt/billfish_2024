@@ -1,0 +1,51 @@
+---
+title: "historic_environmental_data_bf24"
+author: "Andrea Schmidt"
+date: "2024-07-31"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+library(dplyr)
+library(oce)
+library(gsw)
+#Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```
+
+## R Markdown
+Environmental data from a variety of platforms, devices and years was assembled for the purposes of creating a dataset of environmental variables associated with each occurrence of larval billfish
+and all absences using in-situ oceanographic data collected during cruises from archived/raw
+sources (i.e., shipboard thermosalinograph (TSG) and conductivity-temperature-depth (CTD)
+casts) for all samples conducted over the time series (temperature, salinity, dissolved oxygen,
+and chlorophyll) as well as habitat information (i.e., inside/outside surface slicks) and remotely
+sensed ocean products spanning the 20-year period (temperature, salinity, chlorophyll, winds,
+sea surface height anomalies, eddy productivity, etc.). First we read in the header files for a given year. IN the following instance, this is 2016:
+```{r TSG data from 2016}
+#(echo = FALSE)
+#focus on TSG data 2004-2006,2017-2018
+hdr<-read.delim("C:/github/billfish_2024/TSG-SE-1606/SE-16-06_TSG/SE-16-06_001.hdr")
+hdr
+ex<-read.delim("C:/github/billfish_2024/TSG-SE-1606/SE-16-06_TSG/SE-16-06_001.XMLCON")
+ex
+```
+
+## hex file form SBE
+
+This .hex file from 2016 has 319627 rows, each one containing coded data, for example: "B93ECEB87243C210381A787D8F40"
+
+```{r TSG2016 hex file}
+pox<-read.delim("C:/github/billfish_2024/TSG-SE-1606/SE-16-06_TSG/SE-16-06_001.hex")
+pox
+```
+so clearly, the next step is to convert this into something useful. 
+## Convert hex file into data we can work with
+```{r tsg2016 hex to sense}
+
+```
+##Notes about oce from youtbe
+CTD data is output in .cnv. The function, read.oce() will parse CTD data. oce has the ability to parse non-cnv data types, called oceMagic()
+```{open files}
+setwd("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827")
+list.files(pattern="*.cnv")
+```

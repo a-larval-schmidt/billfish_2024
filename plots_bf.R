@@ -86,18 +86,25 @@ bf_taxa<- bf %>%
   mutate(freq = n / sum(n), na.rm=T)
 bf_taxa2<-filter(bf_taxa, taxa!="")
 taxab<-unique(bf_taxa2$taxa)
-bf_taxa_long<-bf_taxa2%>%
-  pivot_wider(names_from=taxa, values_from = freq)
+bf_taxa3<-bf_taxa2%>%mutate(taxa_nsp=gsub(" ","",taxa))
+bf_taxa_long<-bf_taxa3%>%
+  pivot_wider(names_from=taxa_nsp, values_from = freq)
 bf_env3<-left_join(bf_taxa_long, combo, relationship="many-to-many",join_by(sample==Site))
 
-kona_map+geom_scatterpie(data=bf_env3,aes(y=LAT_DD_start, x=LONG_DD_start, group=Transect),
-                         cols=c("Kajikia audax","Makaira nigricans","Tetrapturus angustirostris","Unk.Istiophoridae","Xiphias gladius"))#+
+kona_map+geom_scatterpie(data=bf_env3,aes(y=LAT_DD_start, x=LONG_DD_start),
+                         cols=c("Kajikia audax","Makaira nigricans","Tetrapturus angustirostris","Unk.Istiophoridae","Xiphias gladius"),color=NA)#+
   #coord_equal()+facet_wrap(~Year)
+#bf_env4<-bf_env3[!with(bf_env3,is.na(`Kajikia audax`)& is.na(`Makaira nigricans`)& is.na(`Tetrapturus angustirostris`)&is.na(`Unk.Istiophoridae`)& is.na(`Xiphias gladius`))]
+bf_env4<-bf_env3%>%filter(drop_na(across(bf_env3[2:7,])))
+#bf_env4<-bf_env3%>%drop_na(`Kajikia audax`)
+#bf_env4<-bf_env3%>%drop_na(`Makaira nigricans`)
+bf_env4<-bf_env3%>%drop_na(`Tetrapturus angustirostris`)
+bf_env4<-bf_env4%>%drop_na(`Unk.Istiophoridae`)
+bf_env4<-bf_env4%>%drop_na(`Xiphias gladius`)
 
 ggplot()+geom_scatterpie(data=bf_env3,aes(y=LAT_DD_start, x=LONG_DD_start),
-                cols=c("Kajikia audax","Makaira nigricans","Tetrapturus angustirostris","Unk.Istiophoridae","Xiphias gladius"))+
-  coord_equal()+facet_wrap(~Year)
-
+                         cols = c(Kajikiaaudax,Makairanigricans,Unk.Istiophoridae,Xiphiasgladius,Tetrapturusangustirostris))+
+  coord_equal()
 #code from justin###############
 for(i in 1: length(genera)){ 
   Genus_count<-bf_Genus_Level[bf_Genus_Level$genus==genera[i],]

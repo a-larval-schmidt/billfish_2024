@@ -120,7 +120,8 @@ whip_ik2 <-whip_ik %>%
   mutate("Site"=as.character(Sample)) %>%
   mutate("calc.speed.knts"=((tow.length/(tow.duration*60))*1.944))%>% #use dist.gps, duration (coverted to seconds)= m/s *1.944 to get speed in knts
   unite("DateTime.old",c(Date, Time),sep=" ",remove = F)%>%
-  rename("Transect"=UID_tran)
+  rename("Transect"=UID_tran)#%>%
+  #mutate("tow.duration"=replace(is.na(tow.duration), 60)) #to fix NAs in metadatasheet
 
 length(unique(whip_ik2$Sample))
 
@@ -193,7 +194,7 @@ str(combo_whip_slick_short)
 #write.csv(combo_whip_slick_short,"C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv",row.names = F)
 
 #check for 1704 tsg data#####
-combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short10.csv")
+combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv")
 str(combo)
 summary(combo)
 glimpse(combo)

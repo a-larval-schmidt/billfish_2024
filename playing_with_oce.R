@@ -14,6 +14,7 @@ list.files()
 is.wholenumber<-function(x, tol = .Machine$double.eps^0.5)  abs(x - round(x)) < tol
 read_aco = function(input) {
   d<-read.csv(input)
+  #column header, just list order of names???
   group_by(#decimal time bropke up by time along a particular transect, then take mean of values from that time stamp)
     #mutate(d, V3, lubridate::decimal_date(d[3,])
     #
