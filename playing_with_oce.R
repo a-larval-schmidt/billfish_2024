@@ -4,17 +4,27 @@ library(lubridate)
 library(tidyverse)
 library(oce)
 library(gsw)
+#####WORK WITH THE TSG.LAB files
 #CTD data is output in .cnv. The function, read.oce() will parse CTD data. oce has the ability to parse non-cnv data types, called oceMagic()
+read.ctd("C:/github/billfish_2024/CTD_SE_1704/SE1704CTD/SE1704CastSheets/CTD0013CastSheet.csv")
 setwd("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827")
 list.files()
 #focus on 2004-2006,2017-2018
-#2006 to start
-#files <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="\\.ACO$")
-
+#note sure where to start??try:  ?`[[,oce-method`
+tsgfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="TSG.LAB")#"*TSG.ACO$")
+tempfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="TSG-TEMP-FARENHEIT.LAB")
+ssfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="*.Raw")
+#note to self first few lines of .raw files are a mess likely bubbles and equilibrating
+files
+read.ctd("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/TC0006/SBE21-TSG.LAB")
 is.wholenumber<-function(x, tol = .Machine$double.eps^0.5)  abs(x - round(x)) < tol
+
+#d<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/TC9911/SBE21-TSG.ACO" ,header=F)
+data <- d[["data"]]
 read_aco = function(input) {
   d<-read.csv(input)
   #column header, just list order of names???
+  #Comma separated,year,  julian date, decimal day, decimal time (need conversion factor for this
   group_by(#decimal time bropke up by time along a particular transect, then take mean of values from that time stamp)
     #mutate(d, V3, lubridate::decimal_date(d[3,])
     #
@@ -22,8 +32,15 @@ read_aco = function(input) {
 for (i in 1:length(files)) {
   read_aco(files[i])
 }
-
-#FOR REFERENCE ONLY: UKU MOCNESS FUNCTIon
+##oce and cnv files#####
+f<-("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/SE1206_Processed/ctd0010cfatlobsx.cnv")
+d <- read.ctd(f, columns=list(
+  salinity=list(name="SAL",
+                unit=list(unit=expression(),
+                          scale="PSS-78"))))
+s=d[["salinity"]]
+plot(d, which="temperature")
+#FOR REFERENCE ONLY: UKU MOCNESS FUNCTIon###############
 moc_read_8604 = function(input) {
   d<-read.table(input)
   index=which(files==input)
