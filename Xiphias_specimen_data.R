@@ -1,7 +1,7 @@
 #Xiphias sizes/counts/env
 library(tidyverse)
 library(lubridate)
-bf<-read.csv("C:/github/billfish_2024/MASTER_BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20241305 - BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20240816.csv")
+bf<-read.csv("C:/github/billfish_2024/MASTER_BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20240925 - BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20240816.csv")
 str(bf)
 #doublechecks
 summary(as.factor(bf$taxa)) #checks out with what is in the data sheet
@@ -24,7 +24,41 @@ xgg<-xg %>%transform(useless = substr(lengthy, 1, 1), length_hist = substr(lengt
 xg%>%
   group_by(cruise)%>%
   summarize(sum(count),na.rm=TRUE) #why is this SO incorrect??
- 
+#partial environmental data#####
+combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv")
+xg_env<-left_join(xg, combo, relationship="many-to-many",join_by(Site))
+#write.csv(xg_env,"C:/Users/Andrea.Schmidt/Desktop/for offline/xg_env.csv")
+#merege all env data#####
+df<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/merged_tsgs_redo.csv")
+d<-df %>%
+  mutate(datetime=as_datetime(datetime),.keep="unused")%>%
+  mutate(date=ymd(Day),.keep="unused")%>%
+  mutate(time=hms(str_replace_all(time,"[:alpha:]","")))
+  mutate(local_datetime=with_tz(datetime, "HST"))
+str(d) #times in UTC
+#QC##
+d2<-filter(d, Salinity<40)
+d3<-filter(d2,30<Salinity)
+#add station number infomation for each cruise by matching start/end times of tows in combo to each cruise datasheet
+combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv")
+str(combo)
+comboo<-combo%>%
+  unite("dend",c(Date,Time.end),sep=" ",remove = F)%>%
+  unite("send",c(Date,Time),sep=" ", remove=F)
+combooo<-comboo%>% #times in local or UTC?
+  mutate(EndDateTime=lubridate::as_datetime(dend, tz="HST"), .keep="unused")%>%
+  mutate(StartDateTime=lubridate::as_datetime(send,tz="HST"), .keep="unused")
+#with_tz() changes the time zone in which an instant is displayed. The clock time displayed for the instant changes, but the moment of time described remains the same.
+#add column to d to start
+mini<-select(combooo, c(Site,EndDateTime, StartDateTime))
+str(mini)
+what<-left_join(d3,mini,join_by(local_datetime<=EndDateTime, local_datetime>=StartDateTime))
+str(what)
+ggplot(what, aes(x=datetime,y=TempC))+geom_point()
+#test
+length(unique(what$Site))
+length(unique(combooo$Site))# many stations did NOT have a match based on DateTime format(datetimes,format='%Y%m%d %H:%M')
+#find mean salinity by station
 #plots###########
 ggplot(data=xgg, aes(x=length, y=freq))+geom_point()
 ggplot(data=xgg, aes(x=Year, y=count.sum))+geom_point()
@@ -50,8 +84,7 @@ library(raster)
 library(ggnewscale)
 library(sf)
 library(scatterpie)
-combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv")
-xg_env<-left_join(minix, combo, relationship="many-to-many",join_by(sample==Site))
+
 #map sampling sites###
 world<-ne_countries(scale="medium", returnclass = "sf")
 #oahu_raster <- raster(file.path("C:/Users/Andrea.Schmidt/Documents/M&B_larval_dist_csvs/all_hi_bathy.tiff"))
@@ -84,8 +117,8 @@ kona_map+geom_point(data=combo, aes(y=LAT_DD_start, x=LONG_DD_start, color=Year)
   scale_x_continuous(breaks=seq((-158), (-154.8), 0.5))+
   scale_y_continuous(breaks = seq(18.8, 20.3,0.2))
 
-kona_map+geom_point(data=xg_env, aes(y=LAT_DD_start, x=LONG_DD_start, color=temp.1m,size=(sum(count))))+
-  facet_wrap(~Year)+
+kona_map+geom_point(data=xg_env, aes(y=LAT_DD_start, x=LONG_DD_start, color=temp.1m))+#,size=(sum(count))))+
+  facet_wrap(as.month(date))+
   #scale_color_viridis_c(option="F")
   scale_color_gradientn(colors=c("#00007F", "blue", "#007FFF", "cyan","#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"),na.value="gray 90")+
   theme(panel.background=element_blank(),axis.title.x = element_blank(), axis.title.y = element_blank())
@@ -93,4 +126,10 @@ kona_map+geom_point(data=xg_env, aes(y=LAT_DD_start, x=LONG_DD_start, color=temp
 kona_map+geom_point(data=xg_env, aes(y=LAT_DD_start, x=LONG_DD_start, color=sal.1m,size=(sum(count))))+facet_wrap(~Year)+
   scale_fill_gradient(high = "purple4", low = "purple1")+new_scale_fill()
   #scale_color_viridis_c(option="plasma")
-
+#####ncei????################
+library(ncdf4)
+library(httr)
+library(tidyverse)
+nc <- nc_open('C:/Users/Andrea.Schmidt/Documents/billfish_not_github/WTEE_20170406v10001.nc')
+v1 <- nc$var[[13]]
+dates<- as.POSIXlt(v1$dim[[1]]$vals,origin='1970-01-01',tz='GMT') #get the dates for each time step

@@ -5,32 +5,101 @@ library(tidyverse)
 library(oce)
 library(gsw)
 #####WORK WITH THE TSG.LAB files
-#CTD data is output in .cnv. The function, read.oce() will parse CTD data. oce has the ability to parse non-cnv data types, called oceMagic()
-read.ctd("C:/github/billfish_2024/CTD_SE_1704/SE1704CTD/SE1704CastSheets/CTD0013CastSheet.csv")
+#CTD data is output in .cnv. The function, read.oce() will parse CTD data. oce has the ability to parse non-cnv data types, called oceMagic()...read.ctd("C:/github/billfish_2024/CTD_SE_1704/SE1704CTD/SE1704CastSheets/CTD0013CastSheet.csv")
 setwd("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827")
-list.files()
-#focus on 2004-2006,2017-2018
+#focus on 2004-2006
 #note sure where to start??try:  ?`[[,oce-method`
-tsgfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="TSG.LAB")#"*TSG.ACO$")
-tempfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="TSG-TEMP-FARENHEIT.LAB")
+#tsgfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="TSG.LAB")#"*TSG.ACO$")
+#template<- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="TSG.ACO")
 ssfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="*.Raw")
+read.csv(ssfiles[1])
 #note to self first few lines of .raw files are a mess likely bubbles and equilibrating
-files
-read.ctd("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/TC0006/SBE21-TSG.LAB")
-is.wholenumber<-function(x, tol = .Machine$double.eps^0.5)  abs(x - round(x)) < tol
+tsgfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="TSG-Temp.LAB")
+b<-read.table("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/TC0006/TSG-Temp.LAB")
+b
+read.csv(tsgfiles[1])
+i=13
+b<-read.table(tsgfiles[i])
+str(b)
+colnames(b) <- c("Year", "Day_Time_Julian", "Day_Julian", "Time_frac_of_day", "TempC","Conductivity","Salinity")#,"uncertain")#,"Temp2","Salinity","uncertain")
+newyearsday=as_datetime(paste(b$Year[1],"-01-01"))
+df<-b %>%
+  mutate(Day=as_date(Day_Julian,origin=newyearsday))%>%
+  mutate(time24=(Time_frac_of_day*24),.keep="unused")%>%
+  mutate(time=hm(paste(floor(time24), formatC(round(60*(time24%%1),),width=2,flag=0), sep = ":")),.keep="unused")%>%
+  unite("datetime",Day:time, sep=" ", remove=F)%>%
+  mutate(datetime=as_datetime(datetime)) #if timezones are the cause of things not lining up, fix it here
+print(df)
+str(df)
+outname = paste(df$Year[1],month(df$datetime[1]),'prepped_TSG.csv', sep = "") 
+#write.csv(x=df, file=outname)#decimal time broke up by time along a particular transect, then take mean of values from that time stamp)
+#combine csvs#####
+tsgcsv <- dir("~/billfish_not_github//HistoricCruiseData_ChrisTokita20190827/processed_TSGs/", recursive=TRUE, full.names=TRUE, pattern="csv")
+tsgvalues<-as_tibble(c(Year=NA,
+                     Day_Time_Julian=NA,
+                     Day=NA,
+                     TempC=NA,
+                     Salinity=NA,
+                     datetime=NA,
+                     time=NA))
 
-#d<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/TC9911/SBE21-TSG.ACO" ,header=F)
-data <- d[["data"]]
-read_aco = function(input) {
-  d<-read.csv(input)
-  #column header, just list order of names???
-  #Comma separated,year,  julian date, decimal day, decimal time (need conversion factor for this
-  group_by(#decimal time bropke up by time along a particular transect, then take mean of values from that time stamp)
-    #mutate(d, V3, lubridate::decimal_date(d[3,])
-    #
-}
-for (i in 1:length(files)) {
-  read_aco(files[i])
+#tsgvalues<-read.csv("~/merged_tsgs.csv")
+#merge_tsg_csv = function(input) {
+b<-read.csv(tsgcsv[12])
+keeps <- c("Year", "Day_Time_Julian", "Day","TempC","Salinity","datetime","time")
+b2<-b[keeps]
+str(b2)
+df<-read.csv("~/merged_tsgs_redo.csv")
+str(df)
+df2<-df[keeps]
+df3<-rbind(b2,df2)
+str(df3)
+print(nrow(b2)+nrow(df2))
+print(nrow(df3))
+ifelse((nrow(df3)==(nrow(b2)+nrow(df2))),print("yes"),print("no"))
+#write.csv(df3, file="~/merged_tsgs_redo.csv")
+#}
+for (i in 1:length(tsgcsv)) {
+     merge_tsg_csv(tsgcsv[i])
+   }
+df<-read.csv("~/merged_tsgs.csv")
+d<-df %>%
+  mutate(datetime=as_datetime(datetime),.keep="unused")%>%
+  mutate(date=ymd(Day),.keep="unused")%>%
+  mutate(time=hms(str_replace_all(time,"[:alpha:]","")))
+str(d)
+#write.csv(d, file="~/merged_tsgs2.csv")
+# 
+# 
+# #attempt at a function#######
+# make_stn_mean(tsgfiles[6])
+# is.wholenumber<-function(x, tol = .Machine$double.eps^0.5)  abs(x - round(x)) < tol
+# make_stn_mean = function(input) {
+#   b<-read.table(input)
+#   colnames(b) <- c("Year", "Day_Time_Julian", "Day_Julian", "Time_frac_of_day", "TempC","Conductivity","Temp2","Salinity","dbar")
+#   newyearsday=as_datetime(paste(b$Year[1],"-01-01"))
+#   df<-b %>%
+#     mutate(Day=as_date(Day_Julian,origin=newyearsday))%>%
+#     mutate(time24=(Time_frac_of_day*24),.keep="unused")%>%
+#     mutate(time=hm(paste(floor(time24), formatC(round(60*(time24%%1),),width=2,flag=0), sep = ":")),.keep="unused")%>%
+#     unite("datetime",Day:time, sep=" ", remove=F)%>%
+#     mutate(datetime=as_datetime(datetime)) #if timezones are the cause of things not lining up, fix it here
+#     outname = paste("processed_",input, '.csv', sep = "") 
+#   write.csv(x=df, file=outname)#decimal time broke up by time along a particular transect, then take mean of values from that time stamp)
+# }
+# 
+# #merge 
+# combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv")
+# 
+# #match/merge each cruise data sheet into combo11######
+# #add station number infomation for each cruise by matching start/end times of tows in combo to each cruise datasheet
+# #find mean salinity by station
+# #making pseudo sample locations
+
+
+#######
+for (i in 1:length(tsgfiles)) {
+  make_stn_mean(tsgfiles[i])
 }
 ##oce and cnv files#####
 f<-("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/SE1206_Processed/ctd0010cfatlobsx.cnv")
