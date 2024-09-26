@@ -26,39 +26,107 @@ xg%>%
   summarize(sum(count),na.rm=TRUE) #why is this SO incorrect??
 #partial environmental data#####
 combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv")
+
 xg_env<-left_join(xg, combo, relationship="many-to-many",join_by(Site))
 #write.csv(xg_env,"C:/Users/Andrea.Schmidt/Desktop/for offline/xg_env.csv")
-#merege all env data#####
+#merege TSG env data#####
 df<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/merged_tsgs_redo.csv")
 d<-df %>%
   mutate(datetime=as_datetime(datetime),.keep="unused")%>%
   mutate(date=ymd(Day),.keep="unused")%>%
-  mutate(time=hms(str_replace_all(time,"[:alpha:]","")))
-  mutate(local_datetime=with_tz(datetime, "HST"))
+  mutate(time=hms(str_replace_all(time,"[:alpha:]","")))%>%
+  mutate(local_datetime=with_tz(datetime, "HST")) #view time as HST to match combo data
 str(d) #times in UTC
 #QC##
-d2<-filter(d, Salinity<40)
-d3<-filter(d2,30<Salinity)
+#append9703 and 9804
+o9804<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/CTD_TC_9804 CTD Station Log.csv")
+o9804[,1]<-NULL
+colnames(o9804) <- c("DATE", "TIME_HST", "TSG.TEMP", "TSG.SALINITY", "CTD_Temp", "CTD_Salinity")#,"uncertain")#,"Temp2","Salinity","uncertain")
+str(o9804)
+e<-o9804%>%
+  unite("datetime",DATE:TIME_HST, sep=" ", remove=F)%>%
+  mutate(datetime=mdy_hm(datetime,tz="HST"))%>%#,format="%m/%d/%y %H:%M"))
+  mutate(local_datetime=datetime, .keep="all")%>%
+  mutate(Day_Time_Julian=decimal_date(datetime))%>%
+  mutate(date=date(datetime))%>%
+  mutate(Year=year(datetime))%>%
+  mutate(time=hm(TIME_HST))%>%
+  mutate(TempC=as.numeric(TSG.TEMP))%>%
+  mutate(Salinity=as.numeric(TSG.SALINITY))%>%
+  mutate(X=NA)
+str(e)
+f<-select(e, c(colnames(d)))
+str(f)
+d2<-rbind(d,f)
+o9703<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/CTD_TC 9703 CTD Station Log Comparitive temp-sal.csv")
+str(o9703)
+g<-o9703%>%
+  unite("datetime",DATE:TIME..LOCAL., sep=" ", remove=F)%>%
+  mutate(datetime=mdy_hm(datetime,tz="HST"))%>%#,format="%m/%d/%y %H:%M"))
+  mutate(local_datetime=datetime, .keep="all")%>%
+  mutate(Day_Time_Julian=decimal_date(datetime))%>%
+  mutate(date=date(datetime))%>%
+  mutate(Year=year(datetime))%>%
+  mutate(time=hm(TIME..LOCAL.))%>%
+  mutate(TempC=as.numeric(TSG.TEMP))%>%
+  mutate(Salinity=as.numeric(TSG.SALINITY))%>%
+  mutate(X=CAST.NO.)
+h<-select(g, c(colnames(d2)))
+d3<-rbind(d2,h)
+
 #add station number infomation for each cruise by matching start/end times of tows in combo to each cruise datasheet
-combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv")
+combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/Product1_LarvalBillfish_TowMetadata.csv")
+#combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv")
 str(combo)
 comboo<-combo%>%
   unite("dend",c(Date,Time.end),sep=" ",remove = F)%>%
-  unite("send",c(Date,Time),sep=" ", remove=F)
-combooo<-comboo%>% #times in local or UTC?
+  unite("send",c(Date,Time.start),sep=" ", remove=F)
+combooo<-comboo%>% #times in local
   mutate(EndDateTime=lubridate::as_datetime(dend, tz="HST"), .keep="unused")%>%
   mutate(StartDateTime=lubridate::as_datetime(send,tz="HST"), .keep="unused")
 #with_tz() changes the time zone in which an instant is displayed. The clock time displayed for the instant changes, but the moment of time described remains the same.
 #add column to d to start
 mini<-select(combooo, c(Site,EndDateTime, StartDateTime))
 str(mini)
-what<-left_join(d3,mini,join_by(local_datetime<=EndDateTime, local_datetime>=StartDateTime))
+mini2<-mini%>%
+  mutate(dur=lubridate::interval(start=StartDateTime, end=EndDateTime))%>%
+  mutate(duration=as.numeric(dur, "minutes"))
+mini3<-filter(mini2, (duration>0 & duration<60))
+ggplot(mini3, aes(x=StartDateTime, y=duration))+geom_point()
+#take mean in d3 over tow time durations
+d4<-filter(d3, Salinity<40)
+d5<-filter(d4,30<Salinity)
+#make a column in d3 to say T or F if value falls between combo's start/end times
+mend<-mini$EndDateTime
+mart<-mini$StartDateTime
+d6<-d5%>%
+  mutate(found = map_chr(
+    .x = local_datetime,
+    .f = ~ if_else(
+      condition = any(.x > mini$StartDateTime & .x < mini$EndDateTime),
+      true = "YES",
+      false = NA_character_
+    )
+  ))
+df7<-filter(d6, found=="YES")
+length(df7$found)
+#find where local_datetime==StartDateTime, average Sal and temp over number minutes in "duration"
+#find mean salinity by station
+#more than 1 value per time step, need mean before pulling these together
+
+what<-left_join(d7,mini2,join_by(local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
 str(what)
 ggplot(what, aes(x=datetime,y=TempC))+geom_point()
 #test
 length(unique(what$Site))
+length(unique(what$Year))
 length(unique(combooo$Site))# many stations did NOT have a match based on DateTime format(datetimes,format='%Y%m%d %H:%M')
-#find mean salinity by station
+length(unique(combooo$Year)) #474 stations in 6 years?
+check<-combooo%>%
+  group_by(Year)%>%
+  summarise(stations_per_year = n_distinct(Site))
+ggplot(check, aes(x=Year,y=stations_per_year))+geom_point()
+
 #plots###########
 ggplot(data=xgg, aes(x=length, y=freq))+geom_point()
 ggplot(data=xgg, aes(x=Year, y=count.sum))+geom_point()
