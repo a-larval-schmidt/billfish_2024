@@ -73,7 +73,7 @@ g<-o9703%>%
   mutate(X=CAST.NO.)
 h<-select(g, c(colnames(d2)))
 d3<-rbind(d2,h)
-
+str(d3)
 #add station number infomation for each cruise by matching start/end times of tows in combo to each cruise datasheet
 combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/Product1_LarvalBillfish_TowMetadata.csv")
 #combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv")
@@ -86,13 +86,14 @@ combooo<-comboo%>% #times in local
   mutate(StartDateTime=lubridate::as_datetime(send,tz="HST"), .keep="unused")
 #with_tz() changes the time zone in which an instant is displayed. The clock time displayed for the instant changes, but the moment of time described remains the same.
 #add column to d to start
-mini<-select(combooo, c(Site,EndDateTime, StartDateTime))
+mini<-select(combooo, c(Site,EndDateTime, StartDateTime,LAT_DD_start,LONG_DD_start))
 str(mini)
 mini2<-mini%>%
   mutate(dur=lubridate::interval(start=StartDateTime, end=EndDateTime))%>%
   mutate(duration=as.numeric(dur, "minutes"))
 mini3<-filter(mini2, (duration>0 & duration<60))
-ggplot(mini3, aes(x=StartDateTime, y=duration))+geom_point()
+ggplot(d5, aes(x=local_datetime, y=Salinity))+geom_point()
+
 #take mean in d3 over tow time durations
 d4<-filter(d3, Salinity<40)
 d5<-filter(d4,30<Salinity)
@@ -113,20 +114,114 @@ length(df7$found)
 #find where local_datetime==StartDateTime, average Sal and temp over number minutes in "duration"
 #find mean salinity by station
 #more than 1 value per time step, need mean before pulling these together
+qua<-left_join(d6,mini2,join_by(local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
+what<-left_join(d6,mini2,join_by(local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
 
-what<-left_join(d7,mini2,join_by(local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
-str(what)
-ggplot(what, aes(x=datetime,y=TempC))+geom_point()
+mini2$TempC = NA
+mini2$Salinity = NA
+
+for(i in 1:nrow(mini)) {
+  tsg <- d3 %>%
+    subset(local_datetime >= mini[i,]$StartDateTime &
+             local_datetime <= mini[i,]$EndDateTime)
+  mini$TempC[i] = mean(tsg$TempC)
+  mini$Salinity[i] = mean(tsg$Salinity)
+  
+  print(paste("Completed",i,"of",nrow(mini2),"rows"))
+}
+
+#now identify the time between each sample and all stations
+library(raster)
+Nearest_Temp_Val<-NULL
+for (i in 1:length(LonSamp)){
+  #calculate each of those distances
+  Dist_Vals<-pointDistance(c(LonSamp[i], LatSamp[i]), Temperature_Locations, lonlat=T, allpairs = T)
+  K<-which(Dist_Vals==min(Dist_Vals))#find the location of the minimum distance
+  if (Dist_Vals[K]<1000000){#select the distance you want as your cut-off 
+    Nearest_Temp_Val[i]<-Temperature[K]# fill if below cut-off
+  }
+  else if (Dist_Vals[K]>=1000000){
+    Nearest_Temp_Val[i]<-NA#assign NA if too far away
+  }
+}
+
+#This sort of approach should work for matching the modelled salinity values, but you would need lon and lat coordinates for the tow data (i.e. ʻminiʻ) in order to match.
+### extract data####
+library(ncdf4)
+library(httr)
+library(raster)
+library(sp)
+nc <- nc_open("C:/Users/Andrea.Schmidt/Desktop/for offline/cmems_mod_glo_phy_my_0.083deg_P1D-m_1727396375892.nc")
+v1 <- nc$var[[1]] #list of variables??
+glorysal<- ncvar_get(nc,v1)
+dim(glorysal)#examines the structure of sal
+sal_dates<- as.POSIXlt(v1$dim[[4]]$vals,origin='1970-01-01',tz='GMT') #get the dates for each time step
+lon <- v1$dim[[1]]$vals #gives vector of longitude
+lat <- v1$dim[[2]]$vals #gives vector of latitude
+nc_close(nc)
+
+#dim(nc)[,,,1] #set limit on x-axis by creating a dynamic number (which will always be the number of dimensions in the 3rd element of the list of dimensions of sst2, 120  40  12, in this case 120 longitudes, 40 latitudes over 12 time steps)
+res=rep(NA,n)
+for (i in 1:3000)
+res[i]=mean(nc[,,mean(1:7823)],na.rm=TRUE)
+ #in a for loop, the resolution for the plot is set by the ith value in the 3rd element of the sst2 matrix, in this case the 3rd element is time
+plot(1:n,res,axes=F,type='o',pch=20,xlab='',ylab='modelled salinity') #creates plot  with the x axis going until n ends and then the y axis going for a range of res???? axes=F means no axes but also no weird box bounding the whole graph
+axis(2) #adds axis lines on y axis. axis(3) gives an axis on top of chart and nothing on x/y, axis 4 gives it on y but right side
+axis(1,1:n,format(sal_dates,'%m')) #lets x-axis get filled in with the date column on the bottom of graph, uses lubirate to specify that only the month needs be shown
+box()
+gs<-glorysal[,,mean(1:7823)] #okay so basically set row and columns names as lat long THEN pivot longer so these all become their own columns???
+rownames(gs, do.NULL = TRUE, prefix = "row")
+rownames(gs) <- lon
+colnames(gs, do.NULL = TRUE, prefix = "col")
+colnames(gs) <-lat
+gs<-as.data.frame(as.table(gs))
+colnames(gs) <- c("lon","lat","sal")
+#from J. Perelman
+mini3$GLORYS_sal <- NA
+sal <- nc_open("C:/Users/Andrea.Schmidt/Desktop/for offline/cmems_mod_glo_phy_my_0.083deg_P1D-m_1727396375892.nc")
+#couldn't get nlayers to work so switched to dims
+for(i in 1:7000) {
+  
+  #year=as.numeric(substr(names(sal[[i]]),2,5))
+  #month=as.numeric(substr(names(sal[[i]]),7,8))
+  #day=as.numeric(substr(names(sal[[i]]),10,11))
+  #ymd = ymd(paste(sal_dates[i]))
+
+  idx <- which(mini3$StartDateTime == sal_dates[1])
+  
+  if (length(idx)>0){
+    
+    pts <- SpatialPoints(mini3[idx,c(mini3$LONG_DD_start, mini3$LAT_DD_start)], crs(gs)) # here is where you would need geographical coordinates to match data
+    mini$GLORYS_sal[idx] <- raster::extract(sal[[1]], pts)
+  }
+  else if (length(idx)==0) {}
+  
+  print(paste("Completed",i,"of",7000,"layers"))
+}
+#saveRDS(mini3, file = "mini_sal_GLORYS.rds")
+str(mini3)
+ggplot(mini, aes(x=Site,y=TempC))+geom_point()+facet_wrap(year(mini$StartDateTime))
+#alltsg+geom_point(data=combooo, aes(x=month(StartDateTime), y=temp.1m,color=temp.1m))
 #test
 length(unique(what$Site))
+length(unique(mini$Site))
+length(unique(d3$Site))
 length(unique(what$Year))
 length(unique(combooo$Site))# many stations did NOT have a match based on DateTime format(datetimes,format='%Y%m%d %H:%M')
 length(unique(combooo$Year)) #474 stations in 6 years?
-check<-combooo%>%
-  group_by(Year)%>%
-  summarise(stations_per_year = n_distinct(Site))
-ggplot(check, aes(x=Year,y=stations_per_year))+geom_point()
+check<-mini%>%
+  group_by(year(StartDateTime))%>%
+  #summarise(stations_per_year = n_distinct(Site))%>%
+  count(TempC, Salinity)
+check
+check2<-filter(check, Salinity<40)
+ggplot(check2, aes(x=`year(StartDateTime)`,y=n,color=Salinity))+geom_point()#+scale_color_gradientn(colors=c("#00007F", "blue", "#007FFF", "cyan","#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"),na.value="gray 10")
 
+ch<-mini%>%
+  group_by(year(StartDateTime))%>%
+  summarise(stations_per_year = n_distinct(Site))
+boop+geom_point(data=check, aes(x=`year(StartDateTime)`,y=sval,color=sval))
+ggplot()+geom_point(data=ch, aes(x=`year(StartDateTime)`,y=stations_per_year))
 #plots###########
 ggplot(data=xgg, aes(x=length, y=freq))+geom_point()
 ggplot(data=xgg, aes(x=Year, y=count.sum))+geom_point()
