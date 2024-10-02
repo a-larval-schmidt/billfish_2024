@@ -4,16 +4,14 @@ library(lubridate)
 library(tidyverse)
 library(oce)
 library(gsw)
-#####WORK WITH THE TSG.LAB files
+#TSG-Temp.LAB files#######
 #CTD data is output in .cnv. The function, read.oce() will parse CTD data. oce has the ability to parse non-cnv data types, called oceMagic()...read.ctd("C:/github/billfish_2024/CTD_SE_1704/SE1704CTD/SE1704CastSheets/CTD0013CastSheet.csv")
 setwd("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827")
 #focus on 2004-2006
 #note sure where to start??try:  ?`[[,oce-method`
 #tsgfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="TSG.LAB")#"*TSG.ACO$")
 #template<- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="TSG.ACO")
-ssfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="*.Raw")
-read.csv(ssfiles[1])
-#note to self first few lines of .raw files are a mess likely bubbles and equilibrating
+
 tsgfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="TSG-Temp.LAB")
 b<-read.table("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/TC0006/TSG-Temp.LAB")
 b
@@ -97,10 +95,64 @@ str(d)
 # #making pseudo sample locations
 
 
-#######
+
 for (i in 1:length(tsgfiles)) {
   make_stn_mean(tsgfiles[i])
 }
+
+##notes from meeting with justin#######
+#sept/nov no fish... july is where we start seeing uncertainty in this
+#peak is at 25
+##when does 27N reaches 24C and how does it affect the fishing fleet moving down
+#adults like cooler water, need to balance their need for cool with larval need of warm, so not hot
+#year as a factorto elimitate "timeseries effect"
+#day of year and sst are correalted obiouvsly so don't inlude that
+#lat/long does not have model importance for sst
+#assuming linear relationship with things set as offsets 
+#take log 10 of volume filtered
+#early part of year (April) sees  
+#lack of fish above 27deg, negative linear relationship
+#mix of temp and seasonality but ly JS thinks its potential real
+#TO DO!!!! lunar data with small (<10mm larvae)
+#check cruise reports for sorting methodology
+#
+
+#########STOPPED HERE 09/27!!!!#########
+#.RAW files############
+ssfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="*.Raw")
+
+#note to self first few lines of .raw files are a mess likely bubbles and equilibrating
+prep_raw_csvs = function(input) {
+  drat<-read.table(ssfiles[i])
+  colnames(drat)<-c("Date","Time","Instrument","time_no_sep", "lat_dd","lat_direction","lon_dd","lon_direction","X1","X9","X2.4","Salinity","M","X", "M.1","X.1","hex")
+  raw2<-drat%>%
+    unite("datetime",Date: Time, sep=" ", remove=F)%>%
+    mutate(datetime=mdy_hms(datetime,tz="HST"))%>%#,format="%m/%d/%y %H:%M"))
+    mutate(local_datetime=datetime, .keep="all")%>%
+    mutate(date=date(datetime))%>%
+    mutate(Year=year(datetime))%>%
+    mutate(time=hms(Time))%>%
+    mutate(TempC=as.numeric(M))%>%
+    mutate(Salinity=as.numeric(Salinity))%>%
+    mutate(lat=as.numeric(lat_dd))%>%
+    mutate(Day_Time_Julian=decimal_date(datetime))%>%
+    mutate(lon=as.numeric(lon_dd))
+  outname = paste("processed_",input, '.csv', sep = "") 
+  write.csv(x=raw2, file=outname)#decimal time broke up by time along a particular transect, then take mean of values from that time stamp)
+
+}
+
+for (i in 1:length(ssfiles)) {
+  prep_raw_csvs(ssfiles[i])
+}
+
+rawvalues<-as_tibble(c(Year=NA,
+                       Day_Time_Julian=NA,
+                       Day=NA,
+                       TempC=NA,
+                       Salinity=NA,
+                       datetime=NA,
+                       time=NA))
 ##oce and cnv files#####
 f<-("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/SE1206_Processed/ctd0010cfatlobsx.cnv")
 d <- read.ctd(f, columns=list(
