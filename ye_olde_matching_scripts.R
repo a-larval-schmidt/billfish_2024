@@ -900,3 +900,11 @@ sizes2$Dist2Shore_m[which(sizes2$sample_id=="I.25000-036")]<-160.50
 sizes2$Dist2Shore_m[which(sizes2$sample_id=="I.25000-035")]<-797.04
 sizes2$Dist2Shore_m[which(sizes2$sample_id=="I.25000-037")]<-797.04
 ll<-tibble(sizes2$LAT_DD, sizes2$LON_DD, sizes2$LAT_DD_JL, sizes2$LON_DD_JL, sizes2$length_mm)
+#added from billfish rejects######
+#make a column in d3 (tsg data) to say T or F if value falls between combo's start/end times
+#d6<-d5%>%mutate(found = map_chr(.x = local_datetime,.f = ~ if_else(condition = any(.x > mini$StartDateTime & .x < mini$EndDateTime),true = "YES",false = NA_character_)))
+#df7<-filter(d6, found=="YES")
+#length(df7$found)
+#find where local_datetime==StartDateTime, average Sal and temp over number minutes in "duration"
+#find mean salinity by station
+#more than 1 value per time step, need mean before pulling these together

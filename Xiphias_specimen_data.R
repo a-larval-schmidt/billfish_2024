@@ -4,36 +4,42 @@ library(tidyverse)
 library(lubridate)
 library(suncalc)
 library(lunar)
+library(raster)
+library(ncdf4)
+library(httr)
+library(sp)
 #TO DO: analysis section, look for correlations####
 ##data read in and sanity check#######
 ex<-read.csv("C:/github/billfish_2024/billfish genetics - tissue extractions (2).csv")
 mas<-read.csv("C:/github/billfish_2024/MASTER_BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20240925 - BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20240926.csv")
-mas %>%
+mas %>% # check that data display as they should/ are consistent with the MASTER google sheet, this is correct
   group_by(taxa)%>%
-  summarize(sum(as.numeric(count)),na.rm=TRUE) #this is correct
+  summarize(sum(as.numeric(count)),na.rm=TRUE) 
 summary(as.factor(mas$taxa)) #checks out with what is in the data sheet
+bff<- mas %>% #move length data into own single column
+  pivot_longer(X01mm:X100m, names_to="lengthy",values_to="freq",values_drop_na = TRUE)%>%
+  mutate(frequency=as.numeric(freq))%>%
+  mutate_at(vars(frequency), ~replace(., is.na(.), 0))
+bff %>%group_by(taxa)%>%summarize(sum(frequency),na.rm=TRUE) #this is seems correct, fewer counts than length measurements are available for
+bff%>%group_by(cruise)%>%summarize(sum(frequency)) #gives number of larvae/cruise 
+
 #TO DO:check that length values are valid (dre and paper match when can )#####
 mas2<-mas%>%
   mutate(length_check=ifelse((X01mm:X100m[,i]>=0),mas[, "col"],"no length"))
 
-bff<- mas %>%
-  pivot_longer(X01mm:X100m, names_to="lengthy",values_to="freq",values_drop_na = TRUE)%>%
-  mutate(frequency=as.numeric(freq))%>%
-  mutate_at(vars(frequency), ~replace(., is.na(.), 0))
-
-bff %>%group_by(taxa)%>%summarize(sum(frequency),na.rm=TRUE) #this is seems correct, fewer counts than length measurements are available for
-
-bff%>%group_by(cruise)%>%summarize(sum(frequency)) #gives number of larvae/cruise 
 
 #extraction data with master datasheet###########
 mas_long<-pivot_longer(mas,X01mm:X100m, names_to="paper_length", values_to="length_occurence",values_drop_na = TRUE)
+mas_long %>%group_by(taxa)%>%summarize(sum(length_occurence),na.rm=TRUE) #values match those of bff
 mas_clean<-mas_long%>%
   mutate("paper_length_num"=gsub("mm","",paper_length))%>%
   mutate("paper_length_num"=gsub("X","",paper_length_num))%>%
   mutate("paper_length_num"=gsub("m","",paper_length_num))%>%
   mutate("paper_length_num"=as.numeric(paper_length_num))%>%
   mutate("dre_length"=as.numeric(dre_length))
-exmas<-left_join(mas_clean, ex, by="specimen_identification",relationship = "many-to-many")
+mas_clean2<-mas_clean%>%
+  
+#exmas<-left_join(mas_clean, ex, by="specimen_identification",relationship = "many-to-many")
 #compare exmas to bff
 exmas%>%group_by(vial)%>%summarize(sum(as.numeric(length_occurence)),na.rm=TRUE) #this is NOT correct
 exmas2<-exmas%>%
@@ -78,61 +84,41 @@ combooo<-comboo%>% #times in local
   mutate("cat_moon"=lunar::lunar.phase(x = StartDateTime, shift=10, name=T))
 #with_tz() changes the time zone in which an instant is displayed. The clock time displayed for the instant changes, but the moment of time described remains the same.
 #add column to d to start
-mini_combo<-select(combooo, c(Site,EndDateTime, StartDateTime,LAT_DD_start,LONG_DD_start, phase, cat_moon))
+mini_combo<-combooo%>%dplyr::select(c(Site,EndDateTime, StartDateTime,LAT_DD_start,LONG_DD_start, phase, cat_moon))
 mini2<-mini_combo%>%
   mutate(dur=lubridate::interval(start=StartDateTime, end=EndDateTime))%>%
   mutate(duration=as.numeric(dur, "minutes"))%>%
   filter(duration>0 & duration<60)
 #take mean in d3 ()over tow time durations
-mas14<-select(mas,c(Year, Site, cruise, station,specimen_identification,dre_length,taxa,count))
+mas14<-dplyr::select(mas,c(Year, Site, cruise, station,specimen_identification,dre_length,taxa,count))
 xg14<-filter(mas14, taxa=="Xiphias gladius")
 lilx<-filter(exmas3, comb_length<11)
 xg<-filter(lilx, taxa=="Xiphias gladius")
 #full_env<-left_join(exmas3, lilx, relationship="many-to-many",join_by(Site)) # this will brick R
-mini_xg<-select(xg, c(Year, Site, dre_length, paper_length_num,comb_length, length_occurence,taxa, taxa3,specimen_identification,cruise, station))
+mini_xg<-dplyr::select(xg, c(Year, Site, dre_length, paper_length_num,comb_length, length_occurence,taxa, taxa3,specimen_identification,cruise, station))
 xg_env<-left_join(mini2, xg14, relationship="many-to-many",join_by(Site))
 omg<-left_join(mini2, mas14, relationship="many-to-many",join_by(Site))
 str(xg_env)
-mini<-xg_env
 #write.csv(xg_env,"C:/Users/Andrea.Schmidt/Desktop/for offline/xg_env.csv")
-##BOXPLOTS each taxa as a df######
-xgg<-exmas2%>%
+##each taxa as a df######
+Xg<-exmas2%>%
   filter(taxa=="Xiphias gladius")
-boxplot(xgg$dre_length~month(xgg$StartDateTime))
-boxplot(xg_env$dre_length~xg_env$Year)
-
 Mn<-exmas2%>%
   filter(taxa=="Makaira nigricans")
-boxplot(Mn$comb_length~month(Mn$DateTime))
-ggplot(data=Mn, aes(y=length_occurence,x=comb_length,color=month(Mn$DateTime)))+geom_col()+scale_color_viridis_c()+facet_grid(~Year)
-
 Ta<-exmas2%>%
   filter(taxa=="Tetapterus angustrirostris")
-boxplot(Ta$comb_length~month(Ta$DateTime))
-ggplot(data=Ta, aes(y=length_occurence,x=comb_length,color=month(Ta$DateTime)))+geom_col()+scale_color_viridis_c()#+facet_grid(~Ta$Year)
-
 unk<-exmas2%>%
   filter(taxa=="Unk.Istiophoridae")
-unky<-filter(unk, dre_length<10)
-boxplot(unky$dre_length~month(unky$DateTime))#when filtered to smaller than 10mm there is a pattern!!!
-boxplot(unky$dre_length~unky$cat_moon)
-
-boxplot(unky$dre_length~(unky$Year))
-unk<-filter(unk, comb_length<10)
-ggplot(data=unk, aes(y=length_occurence,x=comb_length,fill=month(unk$DateTime)))+geom_col()+scale_fill_viridis_c()+facet_grid(~Year)
-
 Ka<-exmas2%>%
   filter(taxa=="Kajikia audax")
-boxplot(Ka$comb_length~month(Ka$DateTime))
-ggplot(data=Ka, aes(x=Year,y=comb_length,color=month(Ka$DateTime)))+geom_point()+scale_color_viridis_c()
 #merge TSG env data#####
-df<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/merged_tsgs_redo.csv")
-d<-df %>%
+tsg1<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/merged_tsgs_redo.csv")
+tsg2<-tsg1 %>%
   mutate(datetime=as_datetime(datetime),.keep="unused")%>%
   mutate(date=ymd(Day),.keep="unused")%>%
   mutate(time=hms(str_replace_all(time,"[:alpha:]","")))%>%
   mutate(local_datetime=with_tz(datetime, "HST")) #view time as HST to match combo data
-str(d) #times in UTC
+str(tsg2) #times in UTC
 #QC##
 #append9703 and 9804
 o9804<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/CTD_TC_9804 CTD Station Log.csv")
@@ -153,7 +139,7 @@ e<-o9804%>%
 str(e)
 f<-select(e, c(colnames(d)))
 str(f)
-d2<-rbind(d,f)
+tsg3<-rbind(tsg2,f)
 o9703<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/CTD_TC 9703 CTD Station Log Comparitive temp-sal.csv")
 str(o9703)
 g<-o9703%>%
@@ -168,8 +154,8 @@ g<-o9703%>%
   mutate(Salinity=as.numeric(TSG.SALINITY))%>%
   mutate(X=CAST.NO.)
 h<-select(g, c(colnames(d2)))
-d3<-rbind(d2,h)
-str(d3)
+tsg4<-rbind(tsg3,h)
+str(tsg4)
 #append 1704
 sbe45<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/se1704_AllInclusiveContinuous.csv")
 str(sbe45)
@@ -186,27 +172,29 @@ sbe46<-sbe45%>%
   mutate(Day_Time_Julian=decimal_date(datetime))%>%
   mutate(lon=as.numeric(Furuno.GP90_Longitude ))
 sbe47<-select(sbe46, c(colnames(d3)))
-d34<-rbind(d3,sbe47)
-d4<-filter(d34, Salinity<40)
-d5<-filter(d4,30<Salinity)
-ggplot(d5, aes(x=local_datetime, y=Salinity))+geom_point()
+tsg5<-rbind(tsg4,sbe47)
+tsg5<-filter(tsg5, Salinity<40)
+tsg5<-filter(tsg5,30<Salinity)
+rawva<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/combined_raw_files_2009_2011.csv")
+rawva<-rawva%>%
+  mutate(datetime=ymd_hms(datetime,tz="HST"))%>%#,format="%m/%d/%y %H:%M"))
+  mutate(local_datetime=datetime, .keep="all")%>%
+  mutate(date=date(datetime))%>%
+  mutate(Year=year(datetime))%>%
+  mutate(time=hm(datetime))%>%
+  mutate(Day_Time_Julian=decimal_date(datetime))
+tsg6<-rbind(tsg5,rawva)
+ggplot(tsg6, aes(x=local_datetime, y=Salinity))+geom_point()
 
 #map this against map/geography to see if signal is true vs artefact
 
 ##time join TSG and specimen data (mini)#######
-#make a column in d3 (tsg data) to say T or F if value falls between combo's start/end times
-#d6<-d5%>%mutate(found = map_chr(.x = local_datetime,.f = ~ if_else(condition = any(.x > mini$StartDateTime & .x < mini$EndDateTime),true = "YES",false = NA_character_)))
-#df7<-filter(d6, found=="YES")
-#length(df7$found)
-#find where local_datetime==StartDateTime, average Sal and temp over number minutes in "duration"
-#find mean salinity by station
-#more than 1 value per time step, need mean before pulling these together
-mini_time_join1<-left_join(d5,mini,join_by(local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
+mini_time_join1<-left_join(tsg6,mini,join_by(local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
 mini$TempC = NA
 mini$Salinity = NA
 
 for(i in 1:nrow(mini)) {
-  tsg <- d5 %>%
+  tsg <- tsg6 %>%
     subset(local_datetime >= mini[i,]$StartDateTime &
              local_datetime <= mini[i,]$EndDateTime)
   mini$TempC[i] = mean(tsg$TempC)
@@ -223,11 +211,11 @@ mini_no_na<-mini%>%
   filter(is.na(StartDateTime)==F)
 sample_start=mini_no_na$StartDateTime#sample time points
 sample_end=mini_no_na$EndDateTime
-d6<-d5%>%
+tsg7<-tsg6%>%
   filter(is.na(local_datetime)==F)
-Time_env=d6$local_datetime #tsg timepoints
-Temperature=d5$TempC
-Salinity=d5$Salinity
+Time_env=tsg7$local_datetime #tsg timepoints
+Temperature=tsg7$TempC
+Salinity=tsg7$Salinity
 time_cut_off=mini_no_na$duration
 tryCatch.W.E <- function(expr)
 {
@@ -241,7 +229,7 @@ tryCatch.W.E <- function(expr)
        warning = W)
 }
 
-for (i in 1:length(d5)){
+for (i in 1:length(tsg7)){
   #calculate each of those time distances1
   time_vals<-as.numeric(int_standardize(interval(Time_env[i],sample_start[i])))#duration in seconds
   K<-which(time_vals==min(time_vals))#find the location of the minimum distance
@@ -255,13 +243,14 @@ for (i in 1:length(d5)){
   }
   #tryCatch.W.E("argument is of length zero")
 }
-#updated time match script from Jessie#####
+#merge modelled salinity data#####
+#updated time match script from Jessie##
 mini$TempC = NA
 mini$Salinity = NA
 mini$tsg = NA
 
 for(i in 1:nrow(mini)) {
-  tsg <- d3 %>%
+  tsg <-tsg7%>%
     subset(local_datetime >= mini[i,]$StartDateTime - (24*60*60) &
              local_datetime <= mini[i,]$EndDateTime + (24*60*60))
   mini$tsg[i] = ifelse(nrow(tsg) > 0, "Yes","No")
@@ -275,82 +264,110 @@ mini$Salinity[is.nan(mini$Salinity)] <- NA
 mini$TempC[is.nan(mini$TempC)] <- NA
 
 #prep modeled salinity data####
-#This sort of approach should work for matching the modelled salinity values, but you would need lon and lat coordinates for the tow data (i.e. ʻminiʻ) in order to match.
-#remote sensing libraries#
-library(ncdf4)
-library(httr)
-library(raster)
-library(sp)
-nc <- nc_open("C:/Users/Andrea.Schmidt/Desktop/for offline/cmems_mod_glo_phy_my_0.083deg_P1D-m_1727396375892.nc")
-v1 <- nc$var[[1]] #list of variables??
-glorysal<- ncvar_get(nc,v1)
-dim(glorysal)#examines the structure of sal
-sal_dates<- as.POSIXlt(v1$dim[[4]]$vals,origin='1970-01-01',tz='GMT') #get the dates for each time step
-lon <- v1$dim[[1]]$vals #gives vector of longitude
-lat <- v1$dim[[2]]$vals #gives vector of latitude
-nc_close(nc)
-gs<-as.data.frame(c(lon,lat,sal_dates))
-#par(mar=c(2,2))
-I=which(lon>=201 & lon<=203) #subsets to specific lat/long
-J=which(lat>=20 & lat<=22)
-sal2=glorysal[I,J,]
-n=dim(glorysal)[3] #set limit on x-axis by creating a dynamic number (which will always be the number of dimensions in the 3rd element of the list of dimensions of sst2, 120  40  12, in this case 120 longitudes, 40 latitudes over 12 time steps)
-res=rep(NA,n)
-for (i in 1:n)
-  res[i]=mean(glorysal[,,i],na.rm=TRUE)#set limit on x-axis by creating a dynamic number (which will always be the number of dimensions in the 3rd element of the list of dimensions of sst2, 120  40  12, in this case 120 longitudes, 40 latitudes over 12 time steps)
-res=rep(NA,n)
-#for (i in 1:n)
-#res[i]=mean(glorysal[,,mean(1:7823)],na.rm=TRUE)
- #in a for loop, the resolution for the plot is set by the ith value in the 3rd element of the sst2 matrix, in this case the 3rd element is time
-plot(1:n,res,axes=F,type='o', col="blue",pch=20,xlab='',ylab='modelled salinity') #creates plot  with the x axis going until n ends and then the y axis going for a range of res???? axes=F means no axes but also no weird box bounding the whole graph
-plot(d5$Salinity~month(d5$date), pch=15,col="red")
-axis(2) #adds axis lines on y axis. axis(3) gives an axis on top of chart and nothing on x/y, axis 4 gives it on y but right side
-axis(1,1:n,format(sal_dates,'%m')) #lets x-axis get filled in with the date column on the bottom of graph, uses lubirate to specify that only the month needs be shown
-
-
-#gs<-glorysal[,,mean(1:7823)] #okay so basically set row and columns names as lat long THEN pivot longer so these all become their own columns???
-rownames(gs, do.NULL = TRUE, prefix = "row")
-rownames(gs) <- lon
-colnames(gs, do.NULL = TRUE, prefix = "col")
-colnames(gs) <-lat
-gs<-as.data.frame(as.table(gs))
-colnames(gs) <- c("lon","lat","sal")
-#ABOVE IS FROM SAT COURSE
-#from J. Perelman
+data=("C:/Users/Andrea.Schmidt/Desktop/for offline/cmems_mod_glo_phy_my_0.083deg_P1D-m_1727396375892.nc")
+#data = ("C:/Users/jessica.perelman/Downloads/salinity.nc")
+sal <-brick(data, varname = "so") # double check this is the actual variable name
+NAvalue(sal) <- -9999 # for whatever reason, the "no value" grid cells were stored as NA rather than a numeric in the glorys dataset, so you have to reclassify these.
+mini<-mini2%>%
+  filter(is.na(LONG_DD_start)==F)%>%
+  filter(is.na(LAT_DD_start)==F)
+  
 mini$GLORYS_sal <- NA
-sal <- brick("C:/Users/Andrea.Schmidt/Desktop/for offline/cmems_mod_glo_phy_my_0.083deg_P1D-m_1727396375892.nc")
-#couldn't get nlayers to work so switched to dims ,below is code from jessie
+
 for(i in 1:nlayers(sal)) {
+  
+  # i = 291
   
   year=as.numeric(substr(names(sal[[i]]),2,5))
   month=as.numeric(substr(names(sal[[i]]),7,8))
   day=as.numeric(substr(names(sal[[i]]),10,11))
-  ymd = ymd(paste(sal_dates[i]))
+  ymd = as.Date(as.POSIXct(ymd(paste(year,month,day)), tz = "HST"), tz = "HST")
+  
   idx <- which(as.Date(mini$StartDateTime) == ymd)
-  #idx <- which(mini_no_na$StartDateTime == sal_dates[i])
+  
   if (length(idx)>0){
-    pts <- SpatialPoints(mini[idx,c("LONG_DD_start","LAT_DD_start")], crs(sal)) # here is where you would need geographical coordinates to match data
+    
+    pts <- SpatialPoints(mini[idx,c('LONG_DD_start', 'LAT_DD_start')], crs(sal))
     mini$GLORYS_sal[idx] <- raster::extract(sal[[i]], pts)
+    
   }
   else if (length(idx)==0) {}
   
   print(paste("Completed",i,"of",nlayers(sal),"layers"))
+  
 }
-#saveRDS(mini, file = "mini_sal_GLORYS.rds")
 
-##lat/long join TSG and specimen data (mini) #######
+saveRDS(mini, file = "mini_sal_GLORYS.rds")
+salty<-combooo%>%dplyr::select(c(LONG_DD_start,LAT_DD_start,sal.1m))
+mini3<-left_join(mini, salty)
+mini<-mini3
+plot(mini$sal.1m, mini$GLORYS_sal)
+plt(tsg7$Salinity,mini$GLORYS_sal)
+cor(mini$sal.1m~mini$GLORYS_sal)
+mini<-mini%>%
+  pivot_longer(cols=c(sal.1m, GLORYS_sal), values_to = "salinity", names_to = "source")
+ggplot(mini, aes(x=StartDateTime, y=salinity,color=source))+geom_point()
+
+meansal<-cbind(as.vector(res),sal_dates)
+colnames(meansal)<-c("modelled_salinity","date")
+xg_env<-xg_env%>%mutate(date=date(StartDateTime))
+wsal<-left_join(xg_env, meansal, by=date)
+str(mini3)
+ggplot(mini, aes(x=Site,y=TempC))+geom_point()+facet_wrap(year(mini$StartDateTime))
+#alltsg+geom_point(data=combooo, aes(x=month(StartDateTime), y=temp.1m,color=temp.1m))
+#test/sanity  check
+length(unique(what$Site))
+length(unique(mini$Site))
+length(unique(d3$Site))
+length(unique(what$Year))
+length(unique(combooo$Site))# many stations did NOT have a match based on DateTime format(datetimes,format='%Y%m%d %H:%M')
+length(unique(combooo$Year)) #474 stations in 6 years?
+
+# #This sort of approach should work for matching the modelled salinity values, but you would need lon and lat coordinates for the tow data (i.e. ʻminiʻ) in order to match.
+## this is FROM SAT COURSE
+#nc <- nc_open("C:/Users/Andrea.Schmidt/Desktop/for offline/cmems_mod_glo_phy_my_0.083deg_P1D-m_1727396375892.nc")
+# v1 <- nc$var[[1]] #list of variables??
+# glorysal<- ncvar_get(nc,v1)
+# dim(glorysal)#examines the structure of sal
+# sal_dates<- as.POSIXlt(v1$dim[[4]]$vals,origin='1970-01-01',tz='GMT') #get the dates for each time step
+# lon <- v1$dim[[1]]$vals #gives vector of longitude
+# lat <- v1$dim[[2]]$vals #gives vector of latitude
+# nc_close(nc)
+# gs<-as.data.frame(c(lon,lat,sal_dates))
+# #par(mar=c(2,2))
+# I=which(lon>=201 & lon<=203) #subsets to specific lat/long
+# J=which(lat>=20 & lat<=22)
+# sal2=glorysal[I,J,]
+# n=dim(glorysal)[3] #set limit on x-axis by creating a dynamic number (which will always be the number of dimensions in the 3rd element of the list of dimensions of sst2, 120  40  12, in this case 120 longitudes, 40 latitudes over 12 time steps)
+# res=rep(NA,n)
+# for (i in 1:n)
+#   res[i]=mean(glorysal[,,i],na.rm=TRUE)#set limit on x-axis by creating a dynamic number (which will always be the number of dimensions in the 3rd element of the list of dimensions of sst2, 120  40  12, in this case 120 longitudes, 40 latitudes over 12 time steps)
+# res=rep(NA,n)
+# #for (i in 1:n)
+# #res[i]=mean(glorysal[,,mean(1:7823)],na.rm=TRUE)
+#  #in a for loop, the resolution for the plot is set by the ith value in the 3rd element of the sst2 matrix, in this case the 3rd element is time
+# plot(1:n,res,axes=F,type='o', col="blue",pch=20,xlab='',ylab='modelled salinity') #creates plot  with the x axis going until n ends and then the y axis going for a range of res???? axes=F means no axes but also no weird box bounding the whole graph
+# plot(d5$Salinity~month(d5$date), pch=15,col="red")
+# axis(2) #adds axis lines on y axis. axis(3) gives an axis on top of chart and nothing on x/y, axis 4 gives it on y but right side
+# axis(1,1:n,format(sal_dates,'%m')) #lets x-axis get filled in with the date column on the bottom of graph, uses lubirate to specify that only the month needs be shown
+# #gs<-glorysal[,,mean(1:7823)] #okay so basically set row and columns names as lat long THEN pivot longer so these all become their own columns???
+# rownames(gs, do.NULL = TRUE, prefix = "row")
+# rownames(gs) <- lon
+# colnames(gs, do.NULL = TRUE, prefix = "col")
+# colnames(gs) <-lat
+# gs<-as.data.frame(as.table(gs))
+# colnames(gs) <- c("lon","lat","sal")
 #CTD to SAMPLE LOCATION MATCH code from Justin
-#making pseudo sample locations
+##lat/long join TSG and specimen data (mini) #######
+#making sample locations
 LonSamp=mini$LAT_DD_start
 LatSamp=mini$LONG_DD_start
-
-#define coords from netcdf
-LonTemp= v1$dim[[1]]$vals #gives vector of longitude
-LatTemp=v1$dim[[2]]$vals #gives vector of latitude
-Salinity=res
+LonTemp=mini$LONG_DD_start #v1$dim[[1]]$vals #gives vector of longitude
+LatTemp=mini$LONG_DD_start#v1$dim[[2]]$vals #gives vector of latitude
+Salinity=mini$GLORYS_sal#res
 
 #making location matrix for CTD collections
-Salinity_Locations<-cbind(LonTemp, LatTemp)
+#Salinity_Locations<-cbind(LonTemp, LatTemp)
 
 #now identify the distance between each sample and all CTD locations
 library(raster)
@@ -368,21 +385,6 @@ for (i in 1:length(LonSamp)){
   }
 }
 
-#merge modelled salinity data#####
-meansal<-cbind(as.vector(res),sal_dates)
-colnames(meansal)<-c("modelled_salinity","date")
-xg_env<-xg_env%>%mutate(date=date(StartDateTime))
-wsal<-left_join(xg_env, meansal, by=date)
-str(mini3)
-ggplot(mini, aes(x=Site,y=TempC))+geom_point()+facet_wrap(year(mini$StartDateTime))
-#alltsg+geom_point(data=combooo, aes(x=month(StartDateTime), y=temp.1m,color=temp.1m))
-#test/sanity  check
-length(unique(what$Site))
-length(unique(mini$Site))
-length(unique(d3$Site))
-length(unique(what$Year))
-length(unique(combooo$Site))# many stations did NOT have a match based on DateTime format(datetimes,format='%Y%m%d %H:%M')
-length(unique(combooo$Year)) #474 stations in 6 years?
 
 #plots###########
 check<-mini%>%

@@ -103,6 +103,7 @@ for (i in 1:length(tsgfiles)) {
 ##notes from meeting with justin#######
 #sept/nov no fish... july is where we start seeing uncertainty in this
 #peak is at 25
+#what processes the modelled surface salinity is really representing? To do this, you will want to decompose the salinity trends through time and see if there are broad patterns or anomalies that stand out (e.g. is there any periodicity or oscillations in salinity off Kona at seasonal, inter-annual, or decadal time scales)
 ##when does 27N reaches 24C and how does it affect the fishing fleet moving down
 #adults like cooler water, need to balance their need for cool with larval need of warm, so not hot
 #year as a factorto elimitate "timeseries effect"
@@ -120,10 +121,11 @@ for (i in 1:length(tsgfiles)) {
 #########STOPPED HERE 09/27!!!!#########
 #.RAW files############
 ssfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="*.Raw")
-
+drat<-read.csv(ssfiles[2])
 #note to self first few lines of .raw files are a mess likely bubbles and equilibrating
 prep_raw_csvs = function(input) {
-  drat<-read.table(ssfiles[i])
+  drat<-read.csv(ssfiles[i])
+  if(ncol(drat)==17){
   colnames(drat)<-c("Date","Time","Instrument","time_no_sep", "lat_dd","lat_direction","lon_dd","lon_direction","X1","X9","X2.4","Salinity","M","X", "M.1","X.1","hex")
   raw2<-drat%>%
     unite("datetime",Date: Time, sep=" ", remove=F)%>%
@@ -132,27 +134,76 @@ prep_raw_csvs = function(input) {
     mutate(date=date(datetime))%>%
     mutate(Year=year(datetime))%>%
     mutate(time=hms(Time))%>%
-    mutate(TempC=as.numeric(M))%>%
+    mutate(TempC=as.numeric(M))%>% #originally was "M"
     mutate(Salinity=as.numeric(Salinity))%>%
     mutate(lat=as.numeric(lat_dd))%>%
     mutate(Day_Time_Julian=decimal_date(datetime))%>%
     mutate(lon=as.numeric(lon_dd))
-  outname = paste("processed_",input, '.csv', sep = "") 
-  write.csv(x=raw2, file=outname)#decimal time broke up by time along a particular transect, then take mean of values from that time stamp)
-
+  merp=paste(i)
+  }
+  else if (ncol(drat)<17){
+    colnames(drat)<-c("DateTime","M", "Salinity","Temp2","maybe_conductivity")
+    raw2<-drat%>%
+      mutate(datetime=mdy_hms(DateTime,tz="HST"))%>%#,format="%m/%d/%y %H:%M"))
+      mutate(local_datetime=datetime, .keep="all")%>%
+      mutate(date=date(datetime))%>%
+      mutate(Year=year(datetime))%>%
+      mutate(time=hms(datetime))%>%
+      mutate(TempC=as.numeric(M))%>% #originally was "M"
+      mutate(Salinity=as.numeric(Salinity))%>%
+      filter(Salinity>30)
+  }
+  else if(ncol(drat)==3){
+    colnames(drat)<-c("Date","Time","X_TempC_dbar_Salinity_Conductivity")
+    raw2<-drat%>%
+      unite("datetime",Date: Time, sep=" ", remove=F)%>%
+      mutate(datetime=mdy_hms(datetime,tz="HST"))%>%#,format="%m/%d/%y %H:%M"))
+      mutate(local_datetime=datetime, .keep="all")%>%
+      mutate(date=date(datetime))%>%
+      mutate(Year=year(datetime))%>%
+      mutate(time=hms(Time))%>%
+      separate(col=X_TempC_dbar_Salinity_Conductivity,into=c("X","TempC","dbar","Salinity","Conductivity"), sep="        ")%>%
+      mutate(TempC=as.numeric(TempC))%>%
+      mutate(Salinity=as.numeric(Salinity))%>%
+      mutate(dbar=as.numeric(dbar))%>%
+      mutate(Conductivity=as.numeric(Conductivity))
+  }
+  else if(ncol(drat)==1){print("skip")}
+  outname = paste("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/processed_RAW_TSGs/processed_RAW_TSG_",raw2$Year[i],"_",merp, '.csv', sep = "") 
+  write.csv(x=raw2, file=outname)
 }
 
 for (i in 1:length(ssfiles)) {
-  prep_raw_csvs(ssfiles[i])
+  drat<-read.csv(ssfiles[i])
+  if(ncol(drat)==17){prep_raw_csvs(ssfiles[i])
+  }
+  else if (ncol(drat)<17){}
+  print(paste("Completed",i,"of",length(ssfiles),"files"))
 }
 
-rawvalues<-as_tibble(c(Year=NA,
-                       Day_Time_Julian=NA,
-                       Day=NA,
-                       TempC=NA,
-                       Salinity=NA,
-                       datetime=NA,
-                       time=NA))
+raw_csvs<-dir("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/processed_RAW_TSGs_09_11/", recursive=TRUE, full.names=TRUE, pattern=".csv") 
+#rawvalues<-(c(Year=NA,TempC=NA,Salinity=NA,datetime=NA,time=NA,date=NA,local_datetime=NA))
+as.data.frame(rawvalues)
+#raw_to_tsg_match=function(input) {
+i=1+i
+drat<-read.csv(raw_csvs[i])# if(ncol(drat)==12){
+    drat2<-drat%>%
+      dplyr::select(c(Year,TempC,Salinity,datetime,time,date,local_datetime))
+    rawvalues<-rbind(rawvalues,drat2)# }else if (ncol(drat)==27){
+    drat_no_sal<-drat%>%
+      dplyr::select(c(Year,TempC,datetime,time,date,local_datetime))%>%
+      mutate(Salinity=NA)
+    rawvalues<-rbind(rawvalues,drat_no_sal)#}
+for (i in 1:length(raw_csvs)) {
+  raw_to_tsg_match(raw_csvs[i])
+  print(paste("united",i,"of",length(raw_csvs),"files"))
+  }
+  
+rawvalues2<-rawvalues%>%
+  filter(Salinity<36)%>%
+  filter(Salinity>30)
+#write.csv(x=rawvalues2, file="C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/combined_raw_files_2009_2011.csv")
+
 ##oce and cnv files#####
 f<-("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/SE1206_Processed/ctd0010cfatlobsx.cnv")
 d <- read.ctd(f, columns=list(
