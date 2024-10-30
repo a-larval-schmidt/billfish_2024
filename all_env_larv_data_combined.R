@@ -51,7 +51,7 @@ length(unique(exmas2$specimen_identification))
 #number of specimens per unique vial
 exmas3<-exmas2[which(exmas2$specimen_identification %in% unique(exmas2$specimen_identification)),]
 length(unique(exmas3$specimen_identification))
-#metadatasheet as combo then subset to mini####
+##metadatasheet as combo then subset to mini####
 #add station number infomation for each cruise by matching start/end times of tows in combo to each cruise datasheet
 #combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/Product1_LarvalBillfish_TowMetadata.csv")
 combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv")
@@ -139,7 +139,7 @@ rawva<-rawva%>%
   mutate(Day_Time_Julian=decimal_date(datetime))
 tsg6<-rbind(tsg5,rawva)
 
-#add in 2011 data####
+#####add in 2011 data####
 el<-read.csv("C:/Users/Andrea.Schmidt/Documents/oes1106_1206/OS11-06/sept14_surface_1106.csv")
 el<-el %>% rename("cruise"=V26, "date"= V25, "day_night"=V24, "lon_dd"=V22, 
                   "lat_dd"=V21,"mean_sal"=V6,"mean_temp"=V4,"dbar"=V1)
@@ -157,7 +157,7 @@ el2<-el%>%
 str(el2)
 el2<-select(el2, c(colnames(tsg3)))
 tsg7<-rbind(tsg6,el2)
-##2016 env data####
+#####2016 env data####
 sixteen<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/SE-16-06_MOA_Snapped_Compiled copy.csv")
 str(sixteen)
 meep<-sixteen%>%
@@ -187,13 +187,14 @@ meep2<-select(meep, c(colnames(tsg3)))
 tsg8<-rbind(tsg7,meep2)
 
 
-##time join TSG and specimen data (mini)#######
+#time join TSG and mini, site join this to specimen data#######
 mini_time_join1<-left_join(tsg8,mini,
                            join_by(local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
 full_site_join<-left_join(combooo,mini_time_join1,
                           join_by(Year, Site, LAT_DD_start,LONG_DD_start,EndDateTime, StartDateTime),
                           relationship="many-to-many")
-full<-full_site_join%>%
+specimen_site_join<-left_join(exmas2,full_site_join,join_by(Year, Site))
+full<-specimen_site_join%>%
   mutate(DateTime=mdy_hm(DateTime))%>%
   mutate(Time=hms(Time))%>%
   mutate(Time.end=hms(Time.end))%>%
@@ -203,84 +204,12 @@ full<-full_site_join%>%
   mutate(dur=lubridate::interval(start=StartDateTime, end=EndDateTime))%>%
   mutate(duration=as.numeric(dur, "minutes"))%>%#filter(duration>0 & duration<60)%>%
   mutate("temp_fix"=ifelse(is.na(temp.1m)==F,temp.1m,(ifelse(is.na(temp.1m)==T,TempC,NA))))%>%
-  mutate("sal_fix"=ifelse(is.na(sal.1m)==F,sal.1m,(ifelse(is.na(sal.1m)==T,Salinity,NA))))
+  mutate("sal_fix"=ifelse(is.na(sal.1m)==F,sal.1m,(ifelse(is.na(sal.1m)==T,Salinity,NA))))%>%
+  mutate("density"=count/vol.m3)
 
 ggplot(full, aes(x=year(DateTime), y=sal_fix,color=Year))+geom_point()
+ggplot(full, aes(x=Habitat, y=density, color=temp_fix))+facet_grid(~taxa3)+geom_point()
 
-mini_time_join1<-left_join(tsg8,mini,join_by(local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
-mini$TempC = NA
-mini$Salinity = NA
-
-for(i in 1:nrow(mini)) {
-  tsg <- tsg6 %>%
-    subset(local_datetime >= mini[i,]$StartDateTime &
-             local_datetime <= mini[i,]$EndDateTime)
-  mini$TempC[i] = mean(tsg$TempC)
-  mini$Salinity[i] = mean(tsg$Salinity)
-  
-  print(paste("Completed",i,"of",nrow(mini),"rows"))
-}
-
-#identify the time between each sample and all stations start times and match within a set time cut off
-library(raster)
-d5$Nearest_Temp_Val<-NA
-d5$Nearest_Sal_Val<-NA
-mini_no_na<-mini%>%
-  filter(is.na(StartDateTime)==F)
-sample_start=mini_no_na$StartDateTime#sample time points
-sample_end=mini_no_na$EndDateTime
-tsg7<-tsg6%>%
-  filter(is.na(local_datetime)==F)
-Time_env=tsg7$local_datetime #tsg timepoints
-Temperature=tsg7$TempC
-Salinity=tsg7$Salinity
-time_cut_off=mini_no_na$duration
-tryCatch.W.E <- function(expr)
-{
-  W <- NULL
-  w.handler <- function(w) { # warning handler
-    W <<- w
-    invokeRestart("muffleWarning")
-  }
-  list(value = withCallingHandlers(tryCatch(expr, error = function(e) e),
-                                   warning = w.handler),
-       warning = W)
-}
-
-for (i in 1:length(tsg7)){
-  #calculate each of those time distances1
-  time_vals<-as.numeric(int_standardize(interval(Time_env[i],sample_start[i])))#duration in seconds
-  K<-which(time_vals==min(time_vals))#find the location of the minimum distance
-  if (time_vals[K]<time_cut_off){#select the distance you want as your cut-off
-    #Error in if (time_vals[K] < time_cut_off) { : argument is of length zero
-    Nearest_Sal_Val[i]<-Salinity[K]# fill if below cut-off
-    }
-  else if (time_vals[K]>=time_cut_off){
-    d5$Nearest_Sal_Val[i]<-NA# fill if below cut-off
-    
-  }
-  #tryCatch.W.E("argument is of length zero")
-}
-#merge modelled salinity data#####
-#updated time match script from Jessie##
-mini$TempC = NA
-mini$Salinity = NA
-mini$tsg = NA
-
-for(i in 1:nrow(mini)) {
-  tsg <-tsg6%>%
-    subset(local_datetime >= mini[i,]$StartDateTime - (24*60*60) &
-             local_datetime <= mini[i,]$EndDateTime + (24*60*60))
-  mini$tsg[i] = ifelse(nrow(tsg) > 0, "Yes","No")
-  mini$TempC[i] = mean(tsg$TempC, na.rm=T)
-  mini$Salinity[i] = mean(tsg$Salinity, na.rm=T)
-  
-  print(paste("Completed",i,"of",nrow(mini),"rows"))
-}
-
-mini$Salinity[is.nan(mini$Salinity)] <- NA
-mini$TempC[is.nan(mini$TempC)] <- NA
-ggplot(mini, aes(x=month(StartDateTime), y=Salinity,color=year(StartDateTime)))+geom_point()#+facet_grid(~year(StartDateTime))
 
 #prep modeled salinity data####
 data=("C:/Users/Andrea.Schmidt/Desktop/for offline/cmems_mod_glo_phy_my_0.083deg_P1D-m_1727396375892.nc")
@@ -420,4 +349,3 @@ for (i in 1:length(LonSamp)){
     Nearest_Temp_Val[i]<-NA#assign NA if too far away
   }
 }
-
