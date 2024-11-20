@@ -28,33 +28,15 @@ library(httr)
 library(sp)
 
 
-##data read in and sanity check#######
-ex<-read.csv("C:/github/billfish_2024/billfish genetics - tissue extractions (2).csv")
-mas<-read.csv("C:/github/billfish_2024/M1ASTER_BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20240925 - BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20240202.csv")
-mas %>% # check that data display as they should/ are consistent with the MASTER google sheet, this is correct
-  group_by(taxa)%>%
-  summarize(sum(as.numeric(count)),na.rm=TRUE) 
-summary(as.factor(mas$taxa)) #checks out with what is in the data sheet
-exmas<-left_join(mas, ex, by="specimen_identification",relationship = "many-to-many")
-exmas2<-exmas%>%
-  mutate("spp_id"=gsub("Mn","Makaira nigricans",spp.id. ))%>%
-  mutate("spp_id"=gsub("Ka","Kajikia audax",spp_id))%>%
-  mutate("spp_id"=gsub("Xg","Xiphias gladius",spp_id))%>%
-  mutate("spp_id"=gsub("Ta","Tetapterus angustrirostris",spp_id))%>%
-  mutate("taxa2"=gsub("#N/A" ,"Unk.Istiophoridae",taxa))%>%
-  mutate("taxa3"=dplyr::coalesce(taxa2,spp_id))
-length(unique(mas$specimen_identification))
-#number of unique extracted larvae
-length(unique(ex$specimen_identification))
-#number of unique in combined dataframe, should be equal to master sheet.... ex is a subset of entries in master sheet
-length(unique(exmas2$specimen_identification))
-#number of specimens per unique vial
-exmas3<-exmas2[which(exmas2$specimen_identification %in% unique(exmas2$specimen_identification)),]
-length(unique(exmas3$specimen_identification))
+##larval data read in#######
+re_mas<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/bf_main_and_genetics20241117.csv")
+larv<-re_mas%>%dplyr::select(c("Site","ID_morph_and_PCR","data.source", "count","comb_length","length_occurence"))
+
 ##metadatasheet as combo then subset to mini####
 #add station number infomation for each cruise by matching start/end times of tows in combo to each cruise datasheet
 #combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/Product1_LarvalBillfish_TowMetadata.csv")
-combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv")
+#combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv")
+combo<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_short12.csv")
 str(combo)
 comboo<-combo%>%
   unite("dend",c(Date,Time.end),sep=" ",remove = F)%>%
@@ -65,6 +47,13 @@ combooo<-comboo%>% #times in local
 #with_tz() changes the time zone in which an instant is displayed. The clock time displayed for the instant changes, but the moment of time described remains the same.
 #add column to d to start
 mini<-combooo%>%dplyr::select(c(Site,EndDateTime, StartDateTime,LAT_DD_start,LONG_DD_start))
+
+#data to do list#####
+summary(as.factor(combo[(which(is.na(combo$temp.1m==T))),4]))
+#fill out mean values for temp/sal ect ect  from TSG for what I can find matches for
+#fill out SST. sal, chla data for ALL data points from remote sensed data (use GLORYS to stay consistent with modelled salinityd data). 
+#keep both columns to allow for comparisons
+#OCean color ESA: occci_V6_8day_4km
 #merge TSG env data#####
 tsg1<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/merged_tsgs_redo.csv")
 tsg2<-tsg1 %>%
@@ -144,8 +133,8 @@ el<-read.csv("C:/Users/Andrea.Schmidt/Documents/oes1106_1206/OS11-06/sept14_surf
 el<-el %>% rename("cruise"=V26, "date"= V25, "day_night"=V24, "lon_dd"=V22, 
                   "lat_dd"=V21,"mean_sal"=V6,"mean_temp"=V4,"dbar"=V1)
 el2<-el%>%
-  mutate(datetime=mdy_hm(V2,tz="HST"))%>%#,format="%m/%d/%y %H:%M"))
-  mutate(local_datetime=datetime, .keep="all")%>%
+  mutate(datetime=mdy_hm(V2,tz="HST"))%>%#,format="%m/%d/%y %H:%M")) 
+  mutate(local_datetime=with_tz(datetime, tz="HST"), .keep="all")%>%
   mutate(date=date(datetime))%>%
   mutate(Year=year(datetime))%>%
   mutate(time=hms(datetime))%>%
@@ -159,6 +148,8 @@ el2<-select(el2, c(colnames(tsg3)))
 tsg7<-rbind(tsg6,el2)
 #####2016 env data####
 sixteen<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/SE-16-06_MOA_Snapped_Compiled copy.csv")
+sixteen<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/SE-16-06_MOA_Snapped_Compiled copy.csv")
+
 str(sixteen)
 meep<-sixteen%>%
   mutate(X=1)%>%
@@ -172,24 +163,25 @@ meep<-sixteen%>%
   mutate(Year=year(date))%>%
   mutate(Day_Time_Julian=decimal_date(date))%>%
   mutate(lon_degree=as.numeric(str_sub(Furuno.GP90_Longitude,1,3)),.keep="all")%>%
-  mutate(lon_minute=as.numeric(str_sub(Furuno.GP90_Longitude,4,5)),.keep="all")%>%
-  mutate(lon_seconds=as.numeric(str_sub(Furuno.GP90_Longitude,7,10),.keep="all"))%>%
+  mutate(lon_minute=as.numeric(str_sub(Furuno.GP90_Longitude,4,9)),.keep="all")%>%
   mutate(og_lon=as.numeric(str_replace(Furuno.GP90_Longitude,"[:alpha:]","")))%>%
-  mutate(lon_dd=(-1*lon_degree)+(((lon_minute+lon_seconds)/3600)))%>%
+  mutate(lon_dd=(-1*(lon_degree+(lon_minute/60))))%>%
   mutate(lat_degree=as.numeric(str_sub(Furuno.GP90_Latitude,1,2)),.keep="all")%>%
-  mutate(lat_minute=as.numeric(str_sub(Furuno.GP90_Latitude,3,4)),.keep="all")%>%
-  mutate(lat_seconds=as.numeric(str_sub(Furuno.GP90_Latitude,6,9),.keep="all"))%>%
+  mutate(lat_minute=as.numeric(str_sub(Furuno.GP90_Latitude,3,9)),.keep="all")%>%
   mutate(og_lat=as.numeric(str_replace(Furuno.GP90_Latitude,"[:alpha:]","")))%>%
-  mutate(lat_dd=lat_degree+(lat_minute+lat_seconds)/3600)%>%
-  mutate(LAT_DD_START=og_lat/100)%>%
-  mutate(LON_DD_START=(-1*(og_lon/100))+0.1) #addition of 0.1 is arbitrary
+  mutate(lat_dd=lat_degree+(lat_minute/60))%>%
+  #mutate(LAT_DD_START=og_lat/60)%>%
+  #mutate(LON_DD_START=(-1*(og_lon/60))) 
 meep2<-select(meep, c(colnames(tsg3)))
 tsg8<-rbind(tsg7,meep2)
 
+kona_map+geom_point(data=meep, aes(x=LON_DD_START, y=LAT_DD_START))
+kona_map+geom_point(data=meep, aes(x=lon_dd, y=lat_dd))
 
 #time join TSG and mini, site join this to specimen data#######
 mini_time_join1<-left_join(tsg8,mini,
                            join_by(local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
+
 full_site_join<-left_join(combooo,mini_time_join1,
                           join_by(Year, Site, LAT_DD_start,LONG_DD_start,EndDateTime, StartDateTime),
                           relationship="many-to-many")
@@ -209,7 +201,6 @@ full<-specimen_site_join%>%
 
 ggplot(full, aes(x=year(DateTime), y=sal_fix,color=Year))+geom_point()
 ggplot(full, aes(x=Habitat, y=density, color=temp_fix))+facet_grid(~taxa3)+geom_point()
-
 
 #prep modeled salinity data####
 data=("C:/Users/Andrea.Schmidt/Desktop/for offline/cmems_mod_glo_phy_my_0.083deg_P1D-m_1727396375892.nc")
