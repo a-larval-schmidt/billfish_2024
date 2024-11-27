@@ -27,40 +27,6 @@ mini2<-mini_combo%>%
   mutate(dur=lubridate::interval(start=StartDateTime, end=EndDateTime))%>%
   mutate(duration=as.numeric(dur, "minutes"))%>%
   filter(duration>0 & duration<60)
-#jessie's salinity code#######
-data=("C:/Users/Andrea.Schmidt/Desktop/for offline/cmems_mod_glo_phy_my_0.083deg_P1D-m_1727396375892.nc")
-sal <-brick(data, varname = "so") # double check this is the actual variable name
-NAvalue(sal) <- -9999 # for whatever reason, the "no value" grid cells were stored as NA rather than a numeric in the glorys dataset, so you have to reclassify these.
-mini<-mini2%>%
-  filter(is.na(LONG_DD_start)==F)%>%
-  filter(is.na(LAT_DD_start)==F)
-
-mini$GLORYS_sal <- NA
-
-for(i in 1:nlayers(sal)) {
-  
-  # i = 291
-  
-  year=as.numeric(substr(names(sal[[i]]),2,5))
-  month=as.numeric(substr(names(sal[[i]]),7,8))
-  day=as.numeric(substr(names(sal[[i]]),10,11))
-  ymd = as.Date(as.POSIXct(ymd(paste(year,month,day)), tz = "HST"), tz = "HST")
-  
-  idx <- which(as.Date(mini$StartDateTime) == ymd)
-  
-  if (length(idx)>0){
-    
-    pts <- SpatialPoints(mini[idx,c('LONG_DD_start', 'LAT_DD_start')], crs(sal))
-    mini$GLORYS_sal[idx] <- raster::extract(sal[[i]], pts)
-    
-  }
-  else if (length(idx)==0) {}
-  
-  print(paste("Completed",i,"of",nlayers(sal),"layers"))
-  
-}
-
-saveRDS(mini, file = "mini_sal_GLORYS.rds")
 
 #rain data#########
 #map salinity against map/geography to see if signal is true vs artefact
@@ -82,60 +48,149 @@ WHIP_Tows<-WHIP_Tows[!is.na(WHIP_Tows$Date),]
 
 #junk <- rerddapXtracto::GET("https://upwell.pfeg.noaa.gov/erddap/griddap/wrf_hi.nc?rain%5B(2010-05-115):1:(2018-12-08T00:00:00Z)%5D%5B(19.29692):1:(20.11283)%5D%5B(-155.8704):1:(-156.0757)%5D",write_disk("rain.nc", overwrite=TRUE))
 #rain <-brick(junk, varname = "so") 
+#ERDDAP_Node<-"https://apdrc.soest.hawaii.edu/erddap/griddap/" #"https://upwell.pfeg.noaa.gov/erddap/griddap/" 
+#dataset<-"hawaii_soest_082f_8f5f_78a3"
+#swchlInfo <- rerddap::info(dataset, url=ERDDAP_Node)
+#rain_Match <- rxtracto(swchlInfo, parameter = "precip", xcoord = WHIP_Tows$LONG_DD_start, ycoord = WHIP_Tows$LAT_DD_start, tcoord = WHIP_Tows$Date, xlen = .2, ylen = .2, progress_bar = TRUE)
+#rain<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/bf_precip_data.csv")
+#2010-2013
+data=("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/wrf_hi_e0b7_f9b3_e4bd_U1732662984409.nc") # from : https://upwell.pfeg.noaa.gov/erddap/griddap/wrf_hi.html
+#other option for precipitation but could not downlaod:https://upwell.pfeg.noaa.gov/erddap/griddap/chirps20GlobalPentadP05.html 
+rain <-brick(data, varname = "rain") 
+df<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/GLORYS_sal_matched_to_Site.csv")
+combo<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_short16.csv")
+mini<-combo%>%dplyr::select(c(LAT_DD_start,LONG_DD_start,Site))%>%
+  filter(is.na(LONG_DD_start)==F)%>%
+  filter(is.na(LAT_DD_start)==F)
+#TAKES A LOOOOONNNNGGGG TIIIMMMEEEEE
+mini$rain<- NA
+for(i in 1:nlayers(rain)) {
+  year=as.numeric(substr(names(rain[[i]]),2,5))
+  month=as.numeric(substr(names(rain[[i]]),7,8))
+  day=as.numeric(substr(names(rain[[i]]),10,11))
+  ymd = as.Date(as.POSIXct(ymd(paste(year,month,day)), tz = "UTC"), tz = "UTC")
+  idx <- which(mini$Date == ymd)
+  if (length(idx)>0){
+    
+    pts <- SpatialPoints(mini[idx,c('LONG_DD_start', 'LAT_DD_start')], crs(rain))
+    mini$rain[idx] <- raster::extract(rain[[i]], pts)
+    
+  }
+  else if (length(idx)==0) {}
+  
+  print(paste("Completed",i,"of",nlayers(rain),"layers"))
+  
+}
+minic<-mini%>%dplyr::select(c(Site, rain))%>%distinct(Site,.keep_all = T)
+nrow(minic)
+partial_rain<-full_join(combo, minic)
+ggplot(partial_rain, aes(x=rain, y=sal.1m))+geom_point()
+#2016-2018 rain
+data=("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/wrf_hi_3eba_de0f_0ea8_U1732663267590.nc") 
+mini$rain<- NA
+for(i in 1:nlayers(rain)) {
+  year=as.numeric(substr(names(rain[[i]]),2,5))
+  month=as.numeric(substr(names(rain[[i]]),7,8))
+  day=as.numeric(substr(names(rain[[i]]),10,11))
+  ymd = as.Date(as.POSIXct(ymd(paste(year,month,day)), tz = "UTC"), tz = "UTC")
+  idx <- which(mini$Date == ymd)
+  if (length(idx)>0){
+    
+    pts <- SpatialPoints(mini[idx,c('LONG_DD_start', 'LAT_DD_start')], crs(rain))
+    mini$rain[idx] <- raster::extract(rain[[i]], pts)
+    
+  }
+  else if (length(idx)==0) {}
+  
+  print(paste("Completed",i,"of",nlayers(rain),"layers"))
+  
+}
+minic<-mini%>%dplyr::select(c(Site, rain))%>%distinct(Site,.keep_all = T)
+nrow(minic)
+duh<-full_join(combo, minic)
+ggplot(duh, aes(x=sal.1m, y=rain))+geom_point()
 
-ERDDAP_Node<-"https://apdrc.soest.hawaii.edu/erddap/griddap/" #"https://upwell.pfeg.noaa.gov/erddap/griddap/" 
-dataset<-"hawaii_soest_082f_8f5f_78a3"
-swchlInfo <- rerddap::info(dataset, url=ERDDAP_Node)
-rain_Match <- rxtracto(swchlInfo, parameter = "precip", 
-                      xcoord = WHIP_Tows$LONG_DD_start, ycoord = WHIP_Tows$LAT_DD_start, tcoord = WHIP_Tows$Date, 
-                      xlen = .2, ylen = .2, progress_bar = TRUE)
+write.csv(duh, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_withRain.csv")
+
+#old##########
+rain<-rain%>%
+  mutate("LONG_DD_start"=as.numeric(longitude)+360)%>%
+  mutate("LAT_DD_start"=as.numeric(latitude))%>%
+  mutate("datetime"=ymd_hms(time))
+LonSamp=WHIP_Tows$LONG_DD_start
+LatSamp=WHIP_Tows$LAT_DD_start
+LonTemp=rain$LONG_DD_start
+LatTemp=rain$LAT_DD_start
+Temperature=rain$precip
+#making location matrix for CTD collections
+Temperature_Locations<-cbind(LonTemp, LatTemp)
+#now identify the distance between each sample and all CTD locations
+library(raster)
+Nearest_Temp_Val<-NULL
+len<-nrow(rain)
+for (i in 1:length(LonSamp)){
+  Dist_Vals<-pointDistance(c(LonSamp[i], LatSamp[i]), Temperature_Locations, lonlat=T, allpairs = T)
+  Dist_Vals<-which(Dist_Vals>0)
+  K<-which(Dist_Vals==min(Dist_Vals))#find the location of the minimum distance
+  if (Dist_Vals[K]<10000){#select the distance you want as your cut-off 
+    Nearest_Temp_Val[i]<-Temperature[K]# fill if below cut-off
+  }
+  else if (Dist_Vals[K]>=10000){
+    Nearest_Temp_Val[i]<-NA#assign NA if too far away
+  }
+}
+Nearest_Rain_Val<-Nearest_Temp_Val
+WHIP_Tows<-WHIP_Tows%>%left_join(WHIP_Tows,rain, by=(c("LONG_DD_start","LAT_DD_start", "LAT_DD_end","LONG_DD_end","LAT_DD_mid","LONG_DD_mid")),relationship="many-to-many")
+#WHIP_Tows$rain_Sat<-rain_Match$`mean precip`#`mean analysed_rain`
+ggplot()+geom_point(data=WHIP_Tows, aes(x=LONG_DD_start, y=LAT_DD_start, colour=precip))+scale_colour_viridis(option="G")
 
 
-WHIP_Tows$rain_Sat<-rain_Match$`mean precip`#`mean analysed_rain`
+#maps#####
+mini_rds<-readRDS("mini_sal_GLORYS.rds")
+library(suncalc)
+library(measurements)
+library(stringr)
+library(geosphere)
+library(sp) #already in raster
+library(raster)# error
+library(ggplot2)
+library(scales)
+library(rgdal)
+library(marmap)
+library(maps)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(rgeos)
+library(viridis)
+library(ggplot2)
+library(raster)
+library(ggnewscale)
+library(sf)
+library(scatterpie)
 
+#map sampling sites###
+world<-ne_countries(scale="medium", returnclass = "sf")
+#oahu_raster <- raster(file.path("C:/Users/Andrea.Schmidt/Documents/M&B_larval_dist_csvs/all_hi_bathy.tiff"))
+oahu_raster <- raster(file.path("C:/Users/Andrea.Schmidt/Desktop/for offline/billfish_hi_bathy.tiff")) #ETPO_2022(Bedrock) from https://www.ncei.noaa.gov/maps/bathymetry
+oahu_df <- fortify(as.bathy(oahu_raster))
+str(oahu_df)
 
-ggplot()+geom_point(data=WHIP_Tows, aes(x=LONG_DD_start, y=LAT_DD_start, colour=rain_Sat ))+scale_colour_viridis()
+#kona zoom
+kona_map <- ggplot(data=world) +
+  geom_raster(data = oahu_df, aes(x = x, y = y#, fill = z
+                                  )) +#labs(fill = "Depth (m)")+
+  #scale_fill_gradient(high = "lightskyblue1", low = "lightskyblue2",limits=c(-6000,0))+new_scale_fill()+
+  theme(panel.background=element_blank(),axis.title.x = "", axis.title.y = "")+#, panel.grid.major.x=element_line())+
+  theme_bw()+geom_sf()+coord_sf(xlim=c(-154.8,-157), ylim=c(18.8, 20.3))#coord_sf(xlim=c(-154.8,-158), ylim=c(18.8, 20.3))
+kona_map+geom_point(data=combo, aes(y=LAT_DD_start, x=LONG_DD_start, color=Year))+scale_color_viridis_c(option="F")+
+  theme(panel.background=element_blank(),axis.title.x = element_blank(), axis.title.y = element_blank(),legend.title=element_text(size=20),legend.text=element_text(size=17),
+        legend.direction = "vertical", legend.box = "vertical", axis.text = element_text(size=20))+
+  scale_x_continuous(breaks=seq((-158), (-154.8), 0.5))+
+  scale_y_continuous(breaks = seq(18.8, 20.3,0.2))
 
+kona_map+geom_point(data=rain, aes(y=LAT_DD_start, x=LONG_DD_start, color=precip))+#facet_wrap(~year(datetime))+scale_color_viridis_c(option="H")
+kona_map+geom_point(data=mini_rds,aes(y=LAT_DD_start, x=LONG_DD_start, color=GLORYS_sal))+facet_wrap(~year(StartDateTime))+scale_color_viridis_c(option="H")
 
-#read_in_ID_Data
-mas<-read.csv("C:/github/billfish_2024/MASTER_BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20240925 - BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20240926.csv")
-mas2<-mas%>% #still need to fix this as some values in unk. ist. are lost, some extra values in xiph
-  mutate(dre_length=as.numeric(dre_length))%>%
-  mutate(unknown.sizes=ifelse(is.na(dre_length)==T, 1,NA))%>% #takes care of dre_length v.s. unknown length only
-  mutate(unknown.sizes=ifelse(is.na(rowSums(mas[,38:137]))==T|rowSums(mas[,38:137])==0,1,NA))
-mas_long<-pivot_longer(mas2,X01mm:X100m, names_to="paper_length", values_to="length_occurence",values_drop_na = TRUE)
-mas_clean<-mas_long%>%
-  mutate("paper_length_num"=gsub("mm","",paper_length))%>%
-  mutate("paper_length_num"=gsub("X","",paper_length_num))%>%
-  mutate("paper_length_num"=gsub("m","",paper_length_num))%>%
-  mutate("paper_length_num"=as.numeric(paper_length_num))%>%
-  mutate("dre_length"=as.numeric(dre_length))
-SWD_Larvae<-filter(mas_clean, taxa=="Xiphias gladius")
-SDW_Larvae<-SWD_Larvae%>%filter(paper_length_num<11)
-
-SWD_Larvae_by_Station<-SWD_Larvae %>%
-  group_by(cruise, Site)%>%
-  summarize(SWD_Count=sum(count))
-
-
-WHIP_SWDs<-merge(WHIP_Tows, SWD_Larvae_by_Station, by.x=c("Cruise","Site"), by.y=c("cruise","Site"), all.x=TRUE)
-WHIP_SWDs$SWD_PA<-WHIP_SWDs$SWD_Count
-WHIP_SWDs$SWD_PA[is.na(WHIP_SWDs$SWD_PA)]<-0
-WHIP_SWDs$SWD_PA[WHIP_SWDs$SWD_PA>0]<-1
-
-WHIP_SWDs$Year_Fac<-as.factor(as.character(WHIP_SWDs$Year))
-
-WHIP_SWDs$DOY<-yday(WHIP_SWDs$Date)
-#WHIP_SWDs$Moon_Phase<-lunar.phase(WHIP_SWDs$DateTime)
-WHIP_SWDs$Moon_Phase<-suncalc::getMoonIllumination(date = WHIP_SWDs$DateTime,keep = "phase")
-SWD_rain<-gam(SWD_PA~Year_Fac+Gear+offset(log10(vol.m3))+s(rain_Sat, k=4)+s(WHIP_SWDs$Moon_Phase$phase, bs="cc",k=6), data=WHIP_SWDs, family=binomial)#+s(DOY, bs="cc", k=5)
-summary(SWD_rain)
-plot(SWD_rain, ylim=c(-2,2))
-
-boxplot(WHIP_SWDs$SWD_Count~WHIP_SWDs$Month) #count values wrong
-plot(WHIP_SWDs$rain_Sat, WHIP_SWDs$SWD_PA)
-plot(WHIP_SWDs$rain_Sat, WHIP_SWDs$SWD_Count)
-
-SWD_Count_rain<-gam(SWD_Count~Year_Fac+Gear+offset(log10(vol.m3))+s(rain_Sat, k=4), data=WHIP_SWDs, family=tw)#+s(DOY, bs="cc", k=5)
-summary(SWD_Count_rain)
-plot(SWD_Count_rain)
+ggplot()+geom_point(data=rain, aes(y=LAT_DD_start, x=LONG_DD_start, color=precip))
+ggplot()+geom_point(data=mini_rds, aes(y=LAT_DD_start, x=LONG_DD_start, color=GLORYS_sal))#+facet_grid(larv$taxa)
+ 

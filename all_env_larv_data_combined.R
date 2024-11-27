@@ -29,8 +29,7 @@ library(sp)
 
 
 ##larval data read in#######
-re_mas<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/bf_main_and_genetics20241117.csv")
-larv<-re_mas%>%dplyr::select(c("Site","ID_morph_and_PCR","data.source", "count","comb_length","length_occurence"))
+larv<-re_mas%>%dplyr::select(c("specimen_identification","stage","Site","ID_morph_and_PCR","data.source", "count","comb_length","length_occurence"))
 
 ##metadatasheet as combo then subset to mini####
 #add station number infomation for each cruise by matching start/end times of tows in combo to each cruise datasheet
@@ -44,6 +43,7 @@ comboo<-combo%>%
 combooo<-comboo%>% #times in local
   mutate(EndDateTime=lubridate::as_datetime(dend, tz="HST"), .keep="unused")%>%
   mutate(StartDateTime=lubridate::as_datetime(send,tz="HST"), .keep="unused")
+
 #with_tz() changes the time zone in which an instant is displayed. The clock time displayed for the instant changes, but the moment of time described remains the same.
 #add column to d to start
 mini<-combooo%>%dplyr::select(c(Site,EndDateTime, StartDateTime,LAT_DD_start,LONG_DD_start))
@@ -60,7 +60,7 @@ tsg2<-tsg1 %>%
   mutate(datetime=as_datetime(datetime),.keep="unused")%>%
   mutate(date=ymd(Day),.keep="unused")%>%
   mutate(time=hms(str_replace_all(time,"[:alpha:]","")))%>%
-  mutate(local_datetime=with_tz(datetime, "HST")) #view time as HST to match combo data
+  mutate(local_datetime=with_tz(datetime, "UTC")) #view time as HST to match combo data
 str(tsg2) #times in UTC; this includes 1999 to 2006
 #QC##
 #append9703 and 9804
@@ -159,7 +159,7 @@ meep<-sixteen%>%
   mutate(TempC=as.numeric(SBE.45.Remote.Temperature))%>%
   mutate(Salinity=as.numeric(SBE.45.Salinity))%>%
   mutate(datetime=str_c(date,time,sep=" "))%>%
-  mutate(local_datetime=mdy(datetime, tz="HST"), .keep="all")%>%
+  mutate(local_datetime=with_tz(datetime, tz="HST"), .keep="all")%>%
   mutate(Year=year(date))%>%
   mutate(Day_Time_Julian=decimal_date(date))%>%
   mutate(lon_degree=as.numeric(str_sub(Furuno.GP90_Longitude,1,3)),.keep="all")%>%
@@ -169,23 +169,22 @@ meep<-sixteen%>%
   mutate(lat_degree=as.numeric(str_sub(Furuno.GP90_Latitude,1,2)),.keep="all")%>%
   mutate(lat_minute=as.numeric(str_sub(Furuno.GP90_Latitude,3,9)),.keep="all")%>%
   mutate(og_lat=as.numeric(str_replace(Furuno.GP90_Latitude,"[:alpha:]","")))%>%
-  mutate(lat_dd=lat_degree+(lat_minute/60))%>%
+  mutate(lat_dd=lat_degree+(lat_minute/60))
   #mutate(LAT_DD_START=og_lat/60)%>%
   #mutate(LON_DD_START=(-1*(og_lon/60))) 
 meep2<-select(meep, c(colnames(tsg3)))
 tsg8<-rbind(tsg7,meep2)
 
-kona_map+geom_point(data=meep, aes(x=LON_DD_START, y=LAT_DD_START))
+#kona_map+geom_point(data=meep, aes(x=LON_DD_START, y=LAT_DD_START))
 kona_map+geom_point(data=meep, aes(x=lon_dd, y=lat_dd))
 
 #time join TSG and mini, site join this to specimen data#######
-mini_time_join1<-left_join(tsg8,mini,
-                           join_by(local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
-
+#mini_time_join1<-left_join(tsg8,mini,join_by(local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
+#add limit to date range for joining ^^ within one day ONLY
 full_site_join<-left_join(combooo,mini_time_join1,
                           join_by(Year, Site, LAT_DD_start,LONG_DD_start,EndDateTime, StartDateTime),
                           relationship="many-to-many")
-specimen_site_join<-left_join(exmas2,full_site_join,join_by(Year, Site))
+specimen_site_join<-left_join(larv,full_site_join,join_by(Site))
 full<-specimen_site_join%>%
   mutate(DateTime=mdy_hm(DateTime))%>%
   mutate(Time=hms(Time))%>%
@@ -195,12 +194,24 @@ full<-specimen_site_join%>%
   mutate("cat_moon"=lunar::lunar.phase(x = StartDateTime, shift=10, name=T))%>%
   mutate(dur=lubridate::interval(start=StartDateTime, end=EndDateTime))%>%
   mutate(duration=as.numeric(dur, "minutes"))%>%#filter(duration>0 & duration<60)%>%
-  mutate("temp_fix"=ifelse(is.na(temp.1m)==F,temp.1m,(ifelse(is.na(temp.1m)==T,TempC,NA))))%>%
-  mutate("sal_fix"=ifelse(is.na(sal.1m)==F,sal.1m,(ifelse(is.na(sal.1m)==T,Salinity,NA))))%>%
+  mutate("temp_fix"=ifelse(is.na(temp.1m)==T,TempC,temp.1m))%>% # let both exist in their own columns as well for comparison purposes
+  mutate("sal_fix"=ifelse(is.na(sal.1m)==T,Salinity, sal.1m))%>%#let both exist in their own columns as well for comparison purposes
   mutate("density"=count/vol.m3)
 
 ggplot(full, aes(x=year(DateTime), y=sal_fix,color=Year))+geom_point()
-ggplot(full, aes(x=Habitat, y=density, color=temp_fix))+facet_grid(~taxa3)+geom_point()
+ggplot(full, aes(x=Habitat, y=density, color=temp_fix))+facet_grid(~ID_morph_and_PCR)+geom_point()+scale_color_viridis_c(option="turbo")
+ggplot(full, aes(x=Cruise, y=temp_fix))+geom_point()
+ggplot(full, aes(x=Cruise, y=density, color=temp_fix))+geom_point()+scale_color_viridis_c(option="turbo")
+#station summary table#####
+done<-full%>%group_by(Site)%>%summarize("mean_temp"=mean(temp_fix, NA.rm=T),"mean_sal"=mean(sal_fix,NA.rm=T)) # sig figs to 4 from TSG
+donedone<-left_join(combooo, done, by="Site")
+donedone<-donedone%>%
+  mutate("temp"=ifelse(is.na(temp.1m)==T,mean_temp,temp.1m))%>%
+  mutate("sal"=ifelse(is.na(sal.1m)==T,mean_sal,sal.1m))
+#write.csv(donedone, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_short13.csv")
+summary(as.factor(donedone[(which(is.na(donedone$temp==T))),4]))
+donedone<-donedone%>%
+  mutate("env_data_source"=ifelse(is.na(temp)==F,"TSG","remote sensing")) # rename to temp data source, add in 
 
 #prep modeled salinity data####
 data=("C:/Users/Andrea.Schmidt/Desktop/for offline/cmems_mod_glo_phy_my_0.083deg_P1D-m_1727396375892.nc")
@@ -216,7 +227,6 @@ mini$GLORYS_sal <- NA
 for(i in 1:nlayers(sal)) {
   
   # i = 291
-  
   year=as.numeric(substr(names(sal[[i]]),2,5))
   month=as.numeric(substr(names(sal[[i]]),7,8))
   day=as.numeric(substr(names(sal[[i]]),10,11))
@@ -237,8 +247,175 @@ for(i in 1:nlayers(sal)) {
 }
 
 saveRDS(mini, file = "mini_sal_GLORYS.rds")
-salty<-combooo%>%dplyr::select(c(LONG_DD_start,LAT_DD_start,sal.1m))
-mini3<-left_join(mini, salty)
+#salty<-combooo%>%dplyr::select(c(LONG_DD_start,LAT_DD_start,sal.1m))
+#mini3<-left_join(mini, salty)
+minimini#<-mini%>%dplyr::select(c(GLORYS_sal, Site))
+donedone<-left_join(donedone, minimini, by="Site")
+donedone_glorys<-donedone%>%
+  mutate("sal_data_source"=ifelse(is.na(sal)==T,"Modelled Salinity Data from GLORYS",'In situ measurement'),.keep="all")%>%
+  mutate("salinity"=ifelse(is.na(sal)==T,GLORYS_sal,sal),.keep="all")%>%
+  distinct(Site, .keep_all=T)
+#write.csv(minimini, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/GLORYS_sal_matched_to_Site.csv")
+##add sst##############################
+summary(as.factor(donedone_glorys[(which(is.na(donedone_glorys$salinity==T))),4]))
+f<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/WHIP_SWDs.csv")
+str(f)
+ff<-f%>%dplyr::select(c(Site,SST_Sat))
+d<-ff%>%full_join(donedone_glorys,ff, by="Site")
+dd<-d%>%
+  mutate("temp_data_source"=ifelse(is.na(sal)==T,"SST Data from CRW",'In situ measurement'),.keep="all")%>%
+  mutate("temp"=ifelse(is.na(temp)==T,SST_Sat,temp), .keep="all")
+#write.csv(dd, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_short15.csv")
+#add chla from Jessie!!!!!####
+ddd<-dd%>%mutate(Date=mdy(Date))
+mini<-ddd%>%dplyr::select(c(LAT_DD_start,LONG_DD_start,Site,Date))
+summary(as.factor(dd[(which(is.na(dd$chla==T))),4]))
+summary(as.factor(dd[(which(is.na(dd$chla==T))),7]))
+summary(dd$LAT_DD_start)
+summary(dd$LONG_DD_start)
+library(raster)
+library(tidyverse)
+library(sp)
+library(sf)
+library(reshape2)
+
+setwd("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/")
+
+# read in dataset
+df <- read.csv("combo_whip_slick_short16.csv")
+df$Date = as.Date(df$Date, format = "%m/%d/%Y")
+
+# read in 8-day 4km ocean color data (.nc file)
+data = "ESA_OC_CCI_chla_kd490_1997_2021_8day.nc"
+#data = "ESA_OC_CCI_chla_kd490_1997_2019_monthly.nc"
+
+chlor <-stack(data, varname = "chlor_a")
+kd490 <-stack(data, varname = "kd_490")
+
+# need to mask shallow water cells (< 30m)
+#bathy_file = "Hawaii_bathy_1km.nc"
+#bathy <- raster(bathy_file)
+#bathy[bathy[] < -30 ] = NA 
+#bathy_poly = rasterToPolygons(bathy)
+#plot(bathy_poly)
+
+# add a buffer around 30m depth contour equal to 1/2 diagonal pixel distance of 500m GOCI data 
+#[sqrt((1000^2) + (1000^2))/2] = 707.1068
+#bathy_buffered_poly_1km <- raster::buffer(bathy_poly, width = 707.1068)
+#save(bathy_buffered_poly_1km, file = paste0("envirn_data/bathymetry/bathy_HI_30m_buffered_poly_1km.RData"))
+
+#plot(bathy_buffered_poly_1km)
+
+# use buffered bathymetry file to mask shallow waters around MHI
+load("bathy_HI_30m_buffered_poly_1km.RData")
+chlor_masked <- raster::mask(chlor, bathy_buffered_poly_1km, inverse = TRUE)
+kd490_masked <- raster::mask(kd490, bathy_buffered_poly_1km, inverse = TRUE)
+
+# create new column of nearest 8-day value
+library(data.table)
+
+df1 = df
+y=as.numeric(substr(names(chlor),2,5))
+m=as.numeric(substr(names(chlor),7,8))
+d=as.numeric(substr(names(chlor),10,11))
+df2 = as.data.frame(ymd(paste(y,m,d)))
+names(df2) <- "date"
+
+setDT(df1)[,DT_DATE := Date] # name of date column in your dataset
+setDT(df2)[,DT_DATE := date] # name of date column in df2
+
+# merge d1 and df2 by matching the nearest date from df2 (ocean color 8-day dates) to the date in df1 (your data)
+merged <- df2[df1,on=.(date=DT_DATE),roll="nearest"]
+df_8day = merged[,c("Date","DT_DATE","LAT_DD_start","LONG_DD_start")]
+
+# note 1997 data only goes back to 09/1997 but the cruise for that year is 04/1997, so wonʻt have chlor data for that cruise
+df_8day = subset(df_8day, Date > "1997-12-31")
+
+# create empty columns for chlorophyll and kd490
+df_8day$chlor_8day <- NA
+df_8day$kd490_8day <- NA
+
+for(i in 1:nlayers(chlor)) {
+  
+  # i = 30
+  
+  year=as.numeric(substr(names(chlor_masked[[i]]),2,5))
+  month=as.numeric(substr(names(chlor_masked[[i]]),7,8))
+  day=as.numeric(substr(names(chlor_masked[[i]]),10,11))
+  ymd = ymd(paste(year,month,day))
+  
+  idx <- which(df_8day$DT_DATE == ymd)
+  
+  # need to average layer to get rid of z-value that is causing issues in extract
+  ch = mean(chlor_masked[[i]])
+  k = mean(kd490_masked[[i]])
+  
+  if (length(idx)>0){
+    
+    pts <- SpatialPoints(df_8day[idx,c('LONG_DD_start', 'LAT_DD_start')], crs(ch))
+    
+    df_8day$chlor_8day[idx] <- raster::extract(ch, pts) 
+    df_8day$kd490_8day[idx] <- raster::extract(k, pts) 
+    
+  }
+  else if (length(idx)==0) {}
+  
+  print(paste("Completed",i,"of",nlayers(chlor_masked),"layers"))
+  
+}
+
+# merge matched ocean color back with full dataframe
+duh = left_join(df, df_8day[,-"DT_DATE"], by = c("Date","LONG_DD_start", "LAT_DD_start"))
+#duh<-full_join(dd, all_env_df)#, relationship="one-to-one")
+duh2<-duh%>%
+  mutate("temp_data_source"=ifelse(is.na(sal)==T,"8 day ESA Chlorophyll",'In situ measurement'),.keep="all")%>%
+  mutate("chla_mixed"=ifelse(is.na(chla)==T,chlor_8day,chla))%>%
+  distinct(Site,.keep_all = T)
+summary(as.factor(duh2[(which(is.na(duh2$chla_mixed==T))),6]))
+#match monthly ocean color data to provide the more general productivity of the area at broader timescales 
+#run this script=bathy_HI_30m_buffered_poly_1km.R
+#You should be able to run the same script and just change the "data" file to the monthly file and change the "8day" classifiers to "monthly."
+#final format for matching####
+combo16<-duh2%>%
+  #dplyr::select(!c(chla_ESA_CCIOceanColour,sal,mean_sal,mean_temp,SST_Sat,GLORYS_sal, GLORYS_sal.x, GLORYS_sal.y))%>%
+  mutate(temp.mixed.data=temp,.keep="unused")%>% # allow for TSG and remotse sensing in  their own columns (fix in preceeding dfs)
+  mutate(sal.mixed.data=salinity, .keep = "unused")%>%
+  mutate(chla.mixed.data=chla_mixed, .keep = "unused")%>%
+  mutate(lunar_illumination=lunar.illumination(mdy(Date)), .keep="all")%>%
+  mutate("both_temp"=ifelse((is.na(SST_Sat)==F|is.na(temp)==F),"both","singleton"))%>%
+  mutate("both_sal"=ifelse((is.na(GLORYS_sal)==F|is.na(sal)==F),"both","singleton"))%>%
+  mutate("both_chla"=ifelse((is.na(chla)==F|is.na(chlor_8day)==F),"both","singleton"))%>%
+  distinct(Site,.keep_all = T)
+#write.csv(combo16, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_short16.csv")
+##plot tests######
+specimen_site_join<-left_join(larv, combo16, by="Site")
+full<-specimen_site_join%>%
+  mutate(DateTime=mdy_hm(DateTime))%>%
+  mutate(Time=hms(Time))%>%
+  mutate(Time.end=hms(Time.end))%>%
+  mutate("larval_density_per_cubic_meter"=count/vol.m3)
+full<-full%>%filter(is.na(env_data_source)==F)
+ggplot(full, aes(x=Cruise, y=larval_density_per_cubic_meter, color=sal.1m))+geom_point()+scale_color_viridis_c(option="turbo")+facet_grid(~env_data_source)
+#product2####
+product2<-full%>%
+  mutate(larval_identity=ID_morph_and_PCR, .keep="unused")%>%
+  mutate(standard_length_mm=comb_length,.keep="unused")%>%
+  mutate(unique_specimen_identifier=specimen_identification,.keep="unused")%>%
+  dplyr::select(!c(data.source,Transect, sample, StartDateTime, EndDateTime))
+#write.csv(product2, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/Billfish_Specimen_Environmenal_Data.csv")
+
+##old############
+nc<- nc_open(data)
+names(nc$var)
+v1 <- nc$var[[1]]
+chla1618 <- ncvar_get(nc,v1) 
+dim(chla1618)
+dates<- as.POSIXlt(v1$dim[[3]]$vals,origin='1970-01-01',tz='UTC') #get the dates for each time step
+lon <- v1$dim[[1]]$vals #gives vector of longitude
+lat <- v1$dim[[2]]$vals #gives vector of latitude
+chla<-tibble(lon,lat,dates)
+nc_close(nc) #this step is important, otherwise you risk data loss
+
 plot(mini$sal.1m, mini$GLORYS_sal)
 plt(tsg7$Salinity,mini$GLORYS_sal)
 cor(mini$sal.1m~mini$GLORYS_sal)
@@ -261,82 +438,3 @@ length(unique(what$Year))
 length(unique(combooo$Site))# many stations did NOT have a match based on DateTime format(datetimes,format='%Y%m%d %H:%M')
 length(unique(combooo$Year)) #474 stations in 6 years?
 
-#salinity values from three sources combined########
-salty<-combooo%>%dplyr::select(c(LONG_DD_start,LAT_DD_start,sal.1m))
-mini<-left_join(mini, salty)
-mini_co<-mini%>%
-  mutate(sal_comb=coalesce(Salinity,GLORYS_sal))
-ggplot(mini, aes(x=month(StartDateTime), y=GLORYS_sal,color=year(StartDateTime)))+geom_point()#+facet_grid(~year(StartDateTime))
-larv_env<-left_join(combooo, mas_clean, relationship="many-to-many",join_by(Site))
-ggplot(larv_env, aes(x=month(StartDateTime), y=GLORYS_sal,color=taxa))+geom_point()+facet_grid(~year(StartDateTime))
-
-##lat/long join TSG and specimen data (mini) #######
-#making sample locations
-LonSamp=mini$LAT_DD_start
-LatSamp=mini$LONG_DD_start
-LonTemp=mini$LONG_DD_start #v1$dim[[1]]$vals #gives vector of longitude
-LatTemp=mini$LONG_DD_start#v1$dim[[2]]$vals #gives vector of latitude
-Salinity=mini$GLORYS_sal#res
-
-#making location matrix for CTD collections
-#Salinity_Locations<-cbind(LonTemp, LatTemp)
-
-#now identify the distance between each sample and all CTD locations
-library(raster)
-Nearest_Sal_Val<-NULL
-for (i in 1:length(LonSamp)){
-  #calculate each of those distances
-  Salinity[i]=mean(glorysal[,,mean(1:7823)],na.rm=TRUE)
-  Dist_Vals<-pointDistance(c(LonSamp[i], LatSamp[i]), Salinity_Locations, lonlat=T, allpairs = T)
-  K<-which(Dist_Vals==min(Dist_Vals))#find the location of the minimum distance
-  if (Dist_Vals[K]<1000000){#select the distance you want as your cut-off 
-    Nearest_Sal_Val[i]<-Salinity[K]# fill if below cut-off
-  }
-  else if (Dist_Vals[K]>=1000000){
-    Nearest_Temp_Val[i]<-NA#assign NA if too far away
-  }
-}
-
-LonSamp=mini$LAT_DD_start
-LatSamp=mini$LONG_DD_start
-LonTemp=el$lat_dd #v1$dim[[1]]$vals #gives vector of longitude
-LatTemp=el$lon_dd#v1$dim[[2]]$vals #gives vector of latitude
-Salinity=el$mean_sal#res
-Salinity_Locations<-cbind(LonTemp, LatTemp)
-#now identify the distance between each sample and all CTD locations
-library(raster)
-Nearest_Sal_Val<-NULL
-for (i in 1:length(LonSamp)){
-  #calculate each of those distances
-  Dist_Vals<-pointDistance(c(LonSamp[i], LatSamp[i]), Salinity_Locations, lonlat=T, allpairs = T)
-  K<-which(Dist_Vals==min(Dist_Vals))#find the location of the minimum distance
-  if (Dist_Vals[K]<10000){#select the distance you want as your cut-off 
-    Nearest_Sal_Val[i]<-Salinity[K]# fill if below cut-off
-  }
-  else if (Dist_Vals[K]>=10000){
-    Nearest_Temp_Val[i]<-NA#assign NA if too far away
-  }
-}
-
-
-kona_map+geom_point(data=meep, aes(y=alt_lat, x=alt_lon,color=SBE.45.Salinity))+#, shape=SWD_PA))+
-  theme(panel.background=element_blank(),axis.title.x = element_blank(), axis.title.y = element_blank())
-
-LonSamp=mini$LAT_DD_start
-LatSamp=mini$LONG_DD_start
-LonTemp=meep$LAT_DD_start
-LatTemp=meep$LONG_DD_start
-Salinity=meep$SBE.45.Salinity
-Salinity_Locations<-cbind(LonTemp, LatTemp)
-Nearest_Sal_Val<-NULL
-for (i in 1:length(LonSamp)){
-  #calculate each of those distances
-  Dist_Vals<-pointDistance(c(LonSamp[i], LatSamp[i]), Salinity_Locations, lonlat=T, allpairs = T)
-  K<-which(Dist_Vals==min(Dist_Vals))#find the location of the minimum distance
-  if (Dist_Vals[K]<10000){#select the distance you want as your cut-off 
-    Nearest_Sal_Val[i]<-Salinity[K]# fill if below cut-off
-  }
-  else if (Dist_Vals[K]>=10000){
-    Nearest_Temp_Val[i]<-NA#assign NA if too far away
-  }
-}
