@@ -41,13 +41,13 @@ tsgvalues<-as_tibble(c(Year=NA,
                      datetime=NA,
                      time=NA))
 
-#tsgvalues<-read.csv("~/merged_tsgs.csv")
-#merge_tsg_csv = function(input) {
-b<-read.csv(tsgcsv[12])
+tsgvalues<-read.csv("~/merged_tsgs.csv")
+merge_tsg_csv = function(input) {
+b<-read.csv(tsgcsv[1])
 keeps <- c("Year", "Day_Time_Julian", "Day","TempC","Salinity","datetime","time")
 b2<-b[keeps]
 str(b2)
-df<-read.csv("~/merged_tsgs_redo.csv")
+df<-read.csv("~/merged_tsgs.csv")
 str(df)
 df2<-df[keeps]
 df3<-rbind(b2,df2)
@@ -55,8 +55,8 @@ str(df3)
 print(nrow(b2)+nrow(df2))
 print(nrow(df3))
 ifelse((nrow(df3)==(nrow(b2)+nrow(df2))),print("yes"),print("no"))
-#write.csv(df3, file="~/merged_tsgs_redo.csv")
-#}
+write.csv(df3, file="~/merged_tsgs.csv")
+}
 for (i in 1:length(tsgcsv)) {
      merge_tsg_csv(tsgcsv[i])
    }
@@ -100,23 +100,6 @@ for (i in 1:length(tsgfiles)) {
   make_stn_mean(tsgfiles[i])
 }
 
-##notes from meeting with justin#######
-#sept/nov no fish... july is where we start seeing uncertainty in this
-#peak is at 25
-#what processes the modelled surface salinity is really representing? To do this, you will want to decompose the salinity trends through time and see if there are broad patterns or anomalies that stand out (e.g. is there any periodicity or oscillations in salinity off Kona at seasonal, inter-annual, or decadal time scales)
-##when does 27N reaches 24C and how does it affect the fishing fleet moving down
-#adults like cooler water, need to balance their need for cool with larval need of warm, so not hot
-#year as a factorto elimitate "timeseries effect"
-#day of year and sst are correalted obiouvsly so don't inlude that
-#lat/long does not have model importance for sst
-#assuming linear relationship with things set as offsets 
-#take log 10 of volume filtered
-#early part of year (April) sees  
-#lack of fish above 27deg, negative linear relationship
-#mix of temp and seasonality but ly JS thinks its potential real
-#TO DO!!!! lunar data with small (<10mm larvae)
-#check cruise reports for sorting methodology
-#
 
 #########STOPPED HERE 09/27!!!!#########
 #.RAW files############
