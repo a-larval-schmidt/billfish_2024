@@ -26,9 +26,48 @@ library(raster)
 library(ncdf4)
 library(httr)
 library(sp)
-
+library(dplyr)
 
 ##larval data read in#######
+mas<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/bf_main_20241122.csv")
+og<-filter(mas, data.source!="box")
+og %>% group_by(taxa)%>%summarize(sum(as.numeric(count)),na.rm=TRUE)
+mas %>% group_by(taxa)%>%summarize(sum(as.numeric(count)),na.rm=TRUE) 
+mas2<-mas %>%
+  mutate("dre_length"=as.numeric(dre_length))%>%
+  mutate("unknown.sizes"=as.numeric(unknown.sizes))%>%
+  mutate("unknown.sizes"=ifelse(is.na(dre_length)==F,0,unknown.sizes))%>%
+  mutate("ID.from.PCR2"=ifelse(ID.from.PCR=="", taxa,ID.from.PCR))%>% #trying to get pcr ids into genus column, alternatively just repalce Unk values alt. method from excel, filter out 'unknowns" in ID.from.PCR column
+  mutate("ID_morph_and_PCR"=ifelse(ID.from.PCR2=="Mn", "Makaira nigricans",ifelse(ID.from.PCR2=="Ta", "Tetrapturus angustirostris", 
+                                                                                  ifelse(ID.from.PCR2=="Ka","Kajikia audax",
+                                                                                         ifelse(ID.from.PCR2=="Xg","Xiphias gladius",
+                                                                                                ifelse(ID.from.PCR2=="Unk.Istiophoridae", "Unk.Istiophoridae",taxa))))))
+
+mas2 %>%group_by(taxa)%>%summarize(sum(count),na.rm=TRUE) #values match those of bff; this is an UNDER COUNT
+mas2%>%group_by(taxa)%>%summarize(sum(as.numeric(unknown.sizes)),na.rm=TRUE) #values match those of bff; this is an UNDER COUNT
+
+mas_long<-mas2%>%
+  dplyr::select(c(specimen_identification,X01mm:X100m))%>%
+  pivot_longer(X01mm:X100m,names_to="paper_length",
+               values_to="length_occurence",values_drop_na = T) #pivot longer &coalesce both lengths and frequencies columns or #melt, shape, reshape
+
+mas_clean<-mas_long%>%
+  mutate("paper_length_num"=gsub("mm","",paper_length), .keep="unused")%>%
+  mutate("paper_length_num"=gsub("X","",paper_length_num))%>%
+  mutate("paper_length_num"=gsub("m","",paper_length_num))%>%
+  mutate("paper_length_num"=as.numeric(paper_length_num))#be sure to specify vials v.s. specimen IDs##
+
+mas3<-mas2%>%dplyr::select(!X01mm:X100m)%>%
+  distinct(specimen_identification,.keep_all = T)%>%
+  mutate(unknown.sizes=ifelse(is.na(dre_length)==F,0, unknown.sizes)) 
+mas_long_clean<-mas_clean%>%filter(length_occurence!=0)#distinct function eliminated vials where multiple size classes were counted
+#no need to pull distinct here because the important part is the Site ID
+re_mas<-left_join(mas3,mas_long_clean,by=c(specimen_identification="specimen_identification"))#, vial="vial", taxa="taxa"))#, relationship="many-to-many")
+
+re_mas<-re_mas%>%
+  mutate("length_occurence"=ifelse(is.na(dre_length)==F,1, length_occurence))%>%#give _dre_length its own frequency column
+  mutate("comb_length"=ifelse(is.na(paper_length_num)==T,dre_length,paper_length_num))%>%
+  mutate("freq_check"=length_occurence+unknown.sizes)
 larv<-re_mas%>%dplyr::select(c("specimen_identification","stage","Site","ID_morph_and_PCR","data.source", "count","comb_length","length_occurence"))
 
 ##metadatasheet as combo then subset to mini####
@@ -36,17 +75,20 @@ larv<-re_mas%>%dplyr::select(c("specimen_identification","stage","Site","ID_morp
 #combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/Product1_LarvalBillfish_TowMetadata.csv")
 #combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv")
 combo<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_short12.csv")
-str(combo)
+str(comboo)
 comboo<-combo%>%
   unite("dend",c(Date,Time.end),sep=" ",remove = F)%>%
-  unite("send",c(Date,Time.start),sep=" ", remove=F)
+  unite("send",c(Date,Time.start),sep=" ", remove=F)%>%
+  mutate(Date=mdy(Date))%>%
+  mutate(Time.end=hms(Time.end))%>%
+  mutate(Time.start=hms(Time.start))
 combooo<-comboo%>% #times in local
-  mutate(EndDateTime=lubridate::as_datetime(dend, tz="HST"), .keep="unused")%>%
-  mutate(StartDateTime=lubridate::as_datetime(send,tz="HST"), .keep="unused")
+  mutate(EndDateTime=lubridate::mdy_hms(dend, tz="HST"), .keep="unused")%>%
+  mutate(StartDateTime=lubridate::mdy_hms(send,tz="HST"), .keep="unused")
 
 #with_tz() changes the time zone in which an instant is displayed. The clock time displayed for the instant changes, but the moment of time described remains the same.
 #add column to d to start
-mini<-combooo%>%dplyr::select(c(Site,EndDateTime, StartDateTime,LAT_DD_start,LONG_DD_start))
+mini<-combooo%>%dplyr::select(c(Site,Date,Time.end, Time.start,LAT_DD_start,LONG_DD_start))
 
 #data to do list#####
 summary(as.factor(combo[(which(is.na(combo$temp.1m==T))),4]))
@@ -55,12 +97,12 @@ summary(as.factor(combo[(which(is.na(combo$temp.1m==T))),4]))
 #keep both columns to allow for comparisons
 #OCean color ESA: occci_V6_8day_4km
 #merge TSG env data#####
-tsg1<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/merged_tsgs_redo.csv")
-tsg2<-tsg1 %>%
+tsg1<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/merged_tsgs.csv")
+tsg2<-df %>%
   mutate(datetime=as_datetime(datetime),.keep="unused")%>%
   mutate(date=ymd(Day),.keep="unused")%>%
   mutate(time=hms(str_replace_all(time,"[:alpha:]","")))%>%
-  mutate(local_datetime=with_tz(datetime, "UTC")) #view time as HST to match combo data
+  mutate(local_datetime=with_tz(datetime, "HST")) #view time as HST to match combo data
 str(tsg2) #times in UTC; this includes 1999 to 2006
 #QC##
 #append9703 and 9804
@@ -80,7 +122,7 @@ e<-o9804%>%
   mutate(Salinity=as.numeric(TSG.SALINITY))%>%
   mutate(X=NA)
 str(e)
-sub_9804<-select(e, c(colnames(tsg2)))
+sub_9804<-dplyr::select(e, c(colnames(tsg2)))
 str(sub_9804)
 tsg3<-rbind(tsg2,sub_9804)
 o9703<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/CTD_TC 9703 CTD Station Log Comparitive temp-sal.csv")
@@ -96,7 +138,7 @@ g<-o9703%>%
   mutate(TempC=as.numeric(TSG.TEMP))%>%
   mutate(Salinity=as.numeric(TSG.SALINITY))%>%
   mutate(X=CAST.NO.)
-sub_9703<-select(g, c(colnames(tsg3)))
+sub_9703<-dplyr::select(g, c(colnames(tsg3)))
 tsg4<-rbind(tsg3,sub_9703)
 str(tsg4)
 #append 1704
@@ -114,20 +156,25 @@ sbe46<-sbe45%>%
   mutate(lat=as.numeric(Furuno.GP90_Latitude))%>%
   mutate(Day_Time_Julian=decimal_date(datetime))%>%
   mutate(lon=as.numeric(Furuno.GP90_Longitude ))
-sbe47<-select(sbe46, c(colnames(tsg3)))
+sbe47<-dplyr::select(sbe46, c(colnames(tsg3)))
 tsg5<-rbind(tsg4,sbe47)
 tsg5<-filter(tsg5, Salinity<40)
 tsg5<-filter(tsg5,30<Salinity)
 rawva<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/combined_raw_files_2009_2011.csv")
-rawva<-rawva%>%
+rawva1<-rawva%>%
   mutate(datetime=ymd_hms(datetime,tz="HST"))%>%#,format="%m/%d/%y %H:%M"))
   mutate(local_datetime=datetime, .keep="all")%>%
   mutate(date=date(datetime))%>%
-  mutate(Year=year(datetime))%>%
-  mutate(time=hm(datetime))%>%
+  mutate(Year=year(datetime)) %>%mutate(time=lubridate::hms(datetime))%>%
+  mutate( hour = hour(datetime),
+    minute = minute(datetime),
+    second = second(datetime)) %>% 
+  mutate(time2 = paste(hour, minute, second, sep = ":"), .keep="unused")%>%
   mutate(Day_Time_Julian=decimal_date(datetime))
-tsg6<-rbind(tsg5,rawva)
-
+str(rawva1)
+rawva2<-select(rawva1, c(colnames(tsg5)))
+tsg6<-rbind(tsg5,rawva2)
+str(tsg6)
 #####add in 2011 data####
 el<-read.csv("C:/Users/Andrea.Schmidt/Documents/oes1106_1206/OS11-06/sept14_surface_1106.csv")
 el<-el %>% rename("cruise"=V26, "date"= V25, "day_night"=V24, "lon_dd"=V22, 
@@ -137,14 +184,14 @@ el2<-el%>%
   mutate(local_datetime=with_tz(datetime, tz="HST"), .keep="all")%>%
   mutate(date=date(datetime))%>%
   mutate(Year=year(datetime))%>%
-  mutate(time=hms(datetime))%>%
+  mutate(time=separate(as.string(datetime), sep=" "))%>%
   mutate(TempC=as.numeric(mean_temp))%>%
   mutate(Salinity=as.numeric(mean_sal))%>%
   mutate(lat=as.numeric(lat_dd))%>%
   mutate(Day_Time_Julian=decimal_date(datetime))%>%
   mutate(lon=as.numeric(lon_dd))
 str(el2)
-el2<-select(el2, c(colnames(tsg3)))
+el2<-dplyr::select(el2, c(colnames(tsg3)))
 tsg7<-rbind(tsg6,el2)
 #####2016 env data####
 sixteen<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/SE-16-06_MOA_Snapped_Compiled copy.csv")
@@ -159,7 +206,7 @@ meep<-sixteen%>%
   mutate(TempC=as.numeric(SBE.45.Remote.Temperature))%>%
   mutate(Salinity=as.numeric(SBE.45.Salinity))%>%
   mutate(datetime=str_c(date,time,sep=" "))%>%
-  mutate(local_datetime=with_tz(datetime, tz="HST"), .keep="all")%>%
+  mutate(local_datetime=lubridate::with_tz(datetime, tz="HST"), .keep="all")%>%
   mutate(Year=year(date))%>%
   mutate(Day_Time_Julian=decimal_date(date))%>%
   mutate(lon_degree=as.numeric(str_sub(Furuno.GP90_Longitude,1,3)),.keep="all")%>%
@@ -172,23 +219,47 @@ meep<-sixteen%>%
   mutate(lat_dd=lat_degree+(lat_minute/60))
   #mutate(LAT_DD_START=og_lat/60)%>%
   #mutate(LON_DD_START=(-1*(og_lon/60))) 
-meep2<-select(meep, c(colnames(tsg3)))
+meep2<-dplyr::select(meep, c(colnames(tsg3)))
 tsg8<-rbind(tsg7,meep2)
 
 #kona_map+geom_point(data=meep, aes(x=LON_DD_START, y=LAT_DD_START))
 kona_map+geom_point(data=meep, aes(x=lon_dd, y=lat_dd))
 
+#joining from Jon#########
+library(tidyverse)
+library(fuzzyjoin)
+tsgwhip<-fuzzy_left_join(
+  tsg2, mini,
+  by = c(
+    "date"="Date",
+    "time" = "Time.start",
+    "time" = "Time.end"
+  ),
+  match_fun = list(`==`, `>=`, `<=`)
+)
+#write.csv(tsgwhip, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/fuzzy_joined_tsg.csv")
+#tsgwhip<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/fuzzy_joined_tsg_1216.csv")
 #time join TSG and mini, site join this to specimen data#######
-#mini_time_join1<-left_join(tsg8,mini,join_by(local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
-#add limit to date range for joining ^^ within one day ONLY
-full_site_join<-left_join(combooo,mini_time_join1,
-                          join_by(Year, Site, LAT_DD_start,LONG_DD_start,EndDateTime, StartDateTime),
-                          relationship="many-to-many")
-specimen_site_join<-left_join(larv,full_site_join,join_by(Site))
+#~why are some days having the exact same values???? (se0412-...)
+tsgdfname<-tsg2
+mini_time_join1<-left_join(tsgdfname,mini,join_by(date==Date, between(time, Time.start,Time.end)), relationship="many-to-many")#local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
+tsg10<-mini_time_join1%>%dplyr::select(c(Site, TempC, Salinity))
+#mean temp and sal per Site (one value per site)
+tsg11 <- tsgwhip%>%
+  group_by(Site) %>%
+  summarise(TempC = mean(TempC, na.rm=T), Salinity= mean(Salinity, na.rm=T))
+tsg12<-left_join(mini_time_join1,tsg11, join_by(Site))
+library(tidyverse)
+library(fuzzyjoin)
+full_site_join<-fuzzy_left_join(combooo,tsg11,
+                          by=(c("Site"="Site")),
+                          match_fun = `==`)#Year, Site, LAT_DD_start,LONG_DD_start,Time.start, Time.end),#EndDateTime, StartDateTime),
+                          #relationship="one-to-one")
+specimen_site_join<-left_join(larv,full_site_join,join_by("Site"=="Site.x"))
 full<-specimen_site_join%>%
   mutate(DateTime=mdy_hm(DateTime))%>%
-  mutate(Time=hms(Time))%>%
-  mutate(Time.end=hms(Time.end))%>%
+  #mutate(Time=hms(Time))%>%
+  #mutate(Time.end=hms(Time.end))%>%
   mutate("moon_date"=suncalc::getMoonIllumination(date = StartDateTime,keep = "phase"))%>%
   mutate("phase"=moon_date$phase)%>%
   mutate("cat_moon"=lunar::lunar.phase(x = StartDateTime, shift=10, name=T))%>%
@@ -198,10 +269,14 @@ full<-specimen_site_join%>%
   mutate("sal_fix"=ifelse(is.na(sal.1m)==T,Salinity, sal.1m))%>%#let both exist in their own columns as well for comparison purposes
   mutate("density"=count/vol.m3)
 
-ggplot(full, aes(x=year(DateTime), y=sal_fix,color=Year))+geom_point()
-ggplot(full, aes(x=Habitat, y=density, color=temp_fix))+facet_grid(~ID_morph_and_PCR)+geom_point()+scale_color_viridis_c(option="turbo")
-ggplot(full, aes(x=Cruise, y=temp_fix))+geom_point()
-ggplot(full, aes(x=Cruise, y=density, color=temp_fix))+geom_point()+scale_color_viridis_c(option="turbo")
+both<-full%>% filter(is.na(temp.1m)==F&is.na(TempC)==F)
+ggplot(full, aes(x=DateTime, y=datetime))+geom_point()#+theme(legend.position="none")
+
+four<-full%>%filter(Year==2004)
+ggplot(both, aes(x=year(DateTime), y=sal_fix,color=Year))+geom_point()#+theme(legend.position="none")
+ggplot(both, aes(x=Habitat, y=density, color=temp_fix))+facet_grid(~ID_morph_and_PCR)+geom_point()+scale_color_viridis_c(option="turbo")
+ggplot(both, aes(x=Cruise, y=temp_fix))+geom_point()
+ggplot(both, aes(x=Cruise, y=density, color=temp_fix))+geom_point()+scale_color_viridis_c(option="turbo")
 #station summary table#####
 done<-full%>%group_by(Site)%>%summarize("mean_temp"=mean(temp_fix, NA.rm=T),"mean_sal"=mean(sal_fix,NA.rm=T)) # sig figs to 4 from TSG
 donedone<-left_join(combooo, done, by="Site")
