@@ -14,7 +14,9 @@ library(data.table)
 #distinct ex= 1090, mas=1462, mas2=1257, mas_long=771
 #data read in and prep####
 #mas<-read.csv("C:/github/billfish_2024/MASTER_BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20240925 - BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20241115.csv")
-mas<-read.csv("C:/github/billfish_2024/BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20241119.csv")
+#mas<-read.csv("C:/github/billfish_2024/BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20241119.csv")
+#mas<-read.csv("C:/github/billfish_2024/BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20241121.csv")
+mas<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/bf_main_20241217.csv")
 #^all "dre measured" larvae rows had their paper length values deleted in the csv
 
 og<-filter(mas, data.source!="box")
@@ -56,12 +58,21 @@ re_mas<-re_mas%>%
   mutate("length_occurence"=ifelse(is.na(dre_length)==F,1, length_occurence))%>%#give _dre_length its own frequency column
   mutate("comb_length"=ifelse(is.na(paper_length_num)==T,dre_length,paper_length_num))%>%
   mutate("freq_check"=length_occurence+unknown.sizes) #check that number of measured larvae plus unknown length larvae are consistent with overall count, #dplyr::select(!unknown.sizes)%>%#filter data frame to remove vials where all sizes are unknown (unknown sizes=count), leaves a few where count!= unknown,
+goo<-re_mas
+goop<-goo%>%dplyr::select(c("Site","Year","specimen_identification","ID_morph_and_PCR","data.source", "count","comb_length","length_occurence","stage"))
+goop2<-goop%>%filter((stage)!="")%>%filter(ID_morph_and_PCR!="NA")%>%mutate(staged=fct_relevel(stage,c("preflexion", "flexion","post flexion")))
+ggplot(goop2, aes(x=staged,y=comb_length, label=count))+geom_boxplot()+facet_grid(~ID_morph_and_PCR)+
+  ylab("standard length (mm)")+xlab("developmental stage")+theme_bw()
+str(goop)
+goop3<-goop%>%filter(ID_morph_and_PCR!="NA")
 
-#product 1 compatibility check#####
-combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv")
-larv<-re_mas%>%dplyr::select(c("Site","ID_morph_and_PCR","data.source", "count","comb_length","length_occurence"))
+ggplot(goop3, aes(y=comb_length,x=ID_morph_and_PCR, label=count))+geom_boxplot()+ylab("standard length (mm)")+xlab("species ID")+theme_bw()
+#product 1/combo compatibility check#####
+combo<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_short16.csv")
+larv<-re_mas%>%dplyr::select(c("Site","ID_morph_and_PCR","data.source", "count","comb_length","length_occurence","stage"))
 full<-left_join(larv, combo,by="Site")
-#write.csv(re_mas, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/bf_main_and_genetics20241117.csv")
+full<-full%>%mutate(dnesity=count/vol.m3)
+#write.csv(goop, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/bf_product_2_main_and_genetics.csv")
 
 #check length frequency vs count data#####
 
@@ -79,20 +90,31 @@ erl<-erl%>%mutate("freq_check"=`sum(length_occurence, na.rm = TRUE)`+`sum(unknow
 count_only<-re_mas
 library(treemap)
 treemap(re_mas,
-        index=c("taxa"),#group and subgroup...?
+        index=c("ID_morph_and_PCR"),#group and subgroup...?
         vSize="count",
-        type="index")
+        type="index",
+        title="Proportions of species IDs across all years")
+
+library(treemap)
+treemap(full,
+        index=c("ID_morph_and_PCR","stage"),#group and subgroup...?
+        vSize="dnesity",
+        type="index",
+        title="Densities of species IDs across all years")
+
 
 
 #ts plots###########
 ggplot(full, aes(x=temp.1m, y=sal.1m, shape=ID_morph_and_PCR, color=ID_morph_and_PCR))+
-  geom_point(size=10)+scale_color_viridis_d()+theme(axis.text= element_text(size=20),
+  geom_point(size=10)+scale_color_viridis_d()#+
+  theme(axis.text= element_text(size=20),
                                                     axis.title=element_text(size=30,face="bold"),
                                                     legend.text = element_text(size=40))
 tiny<-full%>%filter(comb_length<10)
-ggplot(tiny, aes(x=temp.1m, y=sal.1m,color=comb_length, shape=ID_morph_and_PCR))+
-  geom_point(size=5, alpha=0.3)+scale_color_viridis_c()#+facet_wrap(~ID_morph_and_PCR)
+ggplot(tiny, aes(x=temp.1m, y=sal.1m,color=ID_morph_and_PCR, shape=ID_morph_and_PCR))+
+  geom_point(size=10)+scale_color_viridis_d()#+facet_wrap(~ID_morph_and_PCR)
 #stage check#####
+
 clean_stage<-re_mas%>%filter(stage!="")%>%filter(stage!="preflexion/flexion???")%>%filter(stage!="flexion/post flexion, only eye available, 1mm across")%>%filter(stage!="unknown-dried")
 ggplot(clean_stage, aes(y=comb_length, x=ID_morph_and_PCR, color=stage))+
   geom_point(alpha=0.3, size=4)+scale_color_viridis_d()
@@ -223,7 +245,7 @@ ggplot(larv, aes(x=TempC, y=Salinity, shape=taxa))+geom_point()
 ggplot(larv, aes(x=temp.1m, y=sal.1m, shape=taxa, color=taxa3))+geom_point()+facet_grid()
 
 
-#maps in a for loop###########
+#kona_map###########
 library(suncalc)
 library(measurements)
 library(stringr)
@@ -248,13 +270,6 @@ world <-ne_countries(scale="medium", returnclass = "sf")
 # ne_countries(scale=10,returnclass = "sf")#generate high res coastlines 
 
 #setwd("C:/JJS_Old_Lptp/HICEAS/IKMT_Processing/Genus_Level_Plots")
-lerv<-filter(larv, !is.na(taxa)==T)
-genera<-unique(larv$taxa)
-merge_data<-larv%>%
-  mutate(genus=taxa3)%>%
-  mutate("Abund_num_1000m3"=(count/vol.m3))%>%
-  mutate("Lon_West"=LONG_DD_start)%>%
-  mutate("Lat_DD"=LAT_DD_start)
 oahu_raster <- raster(file.path("C:/Users/Andrea.Schmidt/Desktop/for offline/billfish_hi_bathy.tiff")) #ETPO_2022(Bedrock) from https://www.ncei.noaa.gov/maps/bathymetry
 oahu_df <- fortify(as.bathy(oahu_raster))
 kona_map <- ggplot(data=world) +
@@ -262,6 +277,15 @@ kona_map <- ggplot(data=world) +
   scale_fill_gradient(high = "white", low = "white",limits=c(-6000,0))+new_scale_fill()+
   theme(panel.background=element_blank(),axis.title.x = "", axis.title.y = "")+#, panel.grid.major.x=element_line())+
   theme_bw()+geom_sf()+coord_sf(xlim=c(-155.6,-156.5), ylim=c(18.8, 20.3))#+coord_sf(xlim=c(-154.8,-157), ylim=c(18.8, 20.3))
+
+# plotting terms in for loop######
+lerv<-filter(larv, !is.na(taxa)==T)
+genera<-unique(larv$taxa)
+merge_data<-larv%>%
+  mutate(genus=taxa3)%>%
+  mutate("Abund_num_1000m3"=(count/vol.m3))%>%
+  mutate("Lon_West"=LONG_DD_start)%>%
+  mutate("Lat_DD"=LAT_DD_start)
 #point maps#####
 kona_map+geom_point(data=larv, aes(y=LAT_DD_start, x=LONG_DD_start, size=count))+#, shape=SWD_PA))+
   facet_wrap(~cat_moon)+
