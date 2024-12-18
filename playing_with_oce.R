@@ -4,6 +4,9 @@ library(lubridate)
 library(tidyverse)
 library(oce)
 library(gsw)
+#SAMOS-TSG-Temp files ######
+samfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="SAMOS-TSG-Temp")
+
 #TSG-Temp.LAB files#######
 #CTD data is output in .cnv. The function, read.oce() will parse CTD data. oce has the ability to parse non-cnv data types, called oceMagic()...read.ctd("C:/github/billfish_2024/CTD_SE_1704/SE1704CTD/SE1704CastSheets/CTD0013CastSheet.csv")
 setwd("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827")
@@ -33,21 +36,27 @@ outname = paste(df$Year[1],month(df$datetime[1]),'prepped_TSG.csv', sep = "")
 #write.csv(x=df, file=outname)#decimal time broke up by time along a particular transect, then take mean of values from that time stamp)
 #combine csvs#####
 tsgcsv <- dir("~/billfish_not_github//HistoricCruiseData_ChrisTokita20190827/processed_TSGs/", recursive=TRUE, full.names=TRUE, pattern="csv")
-tsgvalues<-as_tibble(c(Year=NA,
-                     Day_Time_Julian=NA,
-                     Day=NA,
-                     TempC=NA,
-                     Salinity=NA,
-                     datetime=NA,
-                     time=NA))
+tsgvalues<-as.matrix("Year",NA,
+                     Day_Time_Julian,NA,
+                     Day,NA,
+                     TempC,NA,
+                     Salinity,NA,
+                     datetime,NA,
+                     time,NA)
 
-tsgvalues<-read.csv("~/merged_tsgs.csv")
-merge_tsg_csv = function(input) {
+#run once to get tsgcsv[1] to save as the base:
 b<-read.csv(tsgcsv[1])
 keeps <- c("Year", "Day_Time_Julian", "Day","TempC","Salinity","datetime","time")
 b2<-b[keeps]
 str(b2)
-df<-read.csv("~/merged_tsgs.csv")
+write.csv(b2, file="~/merged_tsgs.csv")
+
+merge_tsg_csv = function(input) {
+b<-read.csv(tsgcsv[i])
+keeps <- c("Year", "Day_Time_Julian", "Day","TempC","Salinity","datetime","time")
+b2<-b[keeps]
+str(b2)
+df<-read.csv("~/billfish_not_github//HistoricCruiseData_ChrisTokita20190827/processed_TSGs/merged_tsgs.csv")
 str(df)
 df2<-df[keeps]
 df3<-rbind(b2,df2)
