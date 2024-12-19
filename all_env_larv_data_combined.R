@@ -71,7 +71,7 @@ re_mas<-re_mas%>%
 larv<-re_mas%>%dplyr::select(c("specimen_identification","stage","Site","ID_morph_and_PCR","data.source", "count","comb_length","length_occurence"))
 
 ##metadatasheet as combo then subset to mini####
-#add station number infomation for each cruise by matching start/end times of tows in combo to each cruise datasheet
+#add station number information for each cruise by matching start/end times of tows in combo to each cruise datasheet
 #combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/Product1_LarvalBillfish_TowMetadata.csv")
 #combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv")
 combo<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_short12.csv")
@@ -97,12 +97,19 @@ summary(as.factor(combo[(which(is.na(combo$temp.1m==T))),4]))
 #keep both columns to allow for comparisons
 #OCean color ESA: occci_V6_8day_4km
 #merge TSG env data#####
-tsg1<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/merged_tsgs.csv")
-tsg2<-df %>%
-  mutate(datetime=as_datetime(datetime),.keep="unused")%>%
-  mutate(date=ymd(Day),.keep="unused")%>%
-  mutate(time=hms(str_replace_all(time,"[:alpha:]","")))%>%
-  mutate(local_datetime=with_tz(datetime, "HST")) #view time as HST to match combo data
+#tsg1<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/merged_tsgs_redo.csv")
+tsg1<-read.csv("~/billfish_not_github//HistoricCruiseData_ChrisTokita20190827/processed_TSGs/merged_tsgs.csv")
+tsg1<-filter(tsg1, Salinity<40)
+tsg1<-filter(tsg1,30<Salinity)
+tsg1<-filter(tsg1, TempC<40)
+tsg1<-filter(tsg1,0<TempC)
+tsg2<-tsg1 %>% 
+  mutate(datetime=mdy_hm(datetime),.keep="all")%>%
+  mutate(Date=lubridate::mdy(Day))%>%
+  mutate(time2=str_replace_all(time,"[:alpha:]",""))%>%
+  mutate(time=hm(time2))%>%
+  mutate(local_datetime=with_tz(datetime, "HST"))#%>% #view time as HST to match combo data
+tsg2<-tsg2%>%dplyr::select(c(Year, TempC, Salinity, datetime,time, local_datetime,Day_Time_Julian))
 str(tsg2) #times in UTC; this includes 1999 to 2006
 #QC##
 #append9703 and 9804
@@ -160,18 +167,39 @@ sbe47<-dplyr::select(sbe46, c(colnames(tsg3)))
 tsg5<-rbind(tsg4,sbe47)
 tsg5<-filter(tsg5, Salinity<40)
 tsg5<-filter(tsg5,30<Salinity)
-rawva<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/combined_raw_files_2009_2011.csv")
+str(tsg5)
+#rawfiles####
+sttfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="SAMOS-TSG-Temp")
+stsfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="SAMOS-TSG-SAL")
+drat<-read.csv(sttfiles[1])
+colnames(drat)<-c("Date","Time", "Derivative","TempC","Temp2","idk","idk2","idk3")
+drat2<-read.csv(sttfiles[2])
+colnames(drat2)<-c("Date","Time", "Derivative","TempC","Temp2","idk","idk2","idk3")
+stt<-rbind(drat, drat2)
+stt2<-select(stt, c(Date, Time, TempC))
+stt3<-stt2%>%unite("datetime",Date, Time, sep=" ")%>% mutate(datetime=mdy_hms(datetime))
+
+drat<-read.csv(stsfiles[1])
+colnames(drat)<-c("Date","Time", "Derivative","Salinity","Salinity2","idk","idk2","idk3")
+drat2<-read.csv(stsfiles[2])
+colnames(drat2)<-c("Date","Time", "Derivative","Salinity","Salinity2","idk","idk2","idk3")
+sts<-rbind(drat, drat2)
+sts2<-select(sts, c(Date, Time, Salinity))
+sts3<-sts2%>%unite(datetime, Date:Time, sep=" ")%>% mutate(datetime=mdy_hms(datetime))
+rawva<-full_join(sts3, stt3)
+#####
 rawva1<-rawva%>%
-  mutate(datetime=ymd_hms(datetime,tz="HST"))%>%#,format="%m/%d/%y %H:%M"))
-  mutate(local_datetime=datetime, .keep="all")%>%
+  mutate(datetime= with_tz(datetime,tz="UTC"), .keep="all")%>%
+  mutate(local_datetime= with_tz(datetime,tz="HST"), .keep="all")%>%
   mutate(date=date(datetime))%>%
-  mutate(Year=year(datetime)) %>%mutate(time=lubridate::hms(datetime))%>%
+  mutate(Year=year(datetime)) %>%
   mutate( hour = hour(datetime),
     minute = minute(datetime),
     second = second(datetime)) %>% 
   mutate(time2 = paste(hour, minute, second, sep = ":"), .keep="unused")%>%
+  mutate(time=lubridate::hms(time2))%>%
   mutate(Day_Time_Julian=decimal_date(datetime))
-str(rawva1)
+str(rawva1)#its okay that there loads of NAs, sal and temp measurements were not taken at exactly the same time so full_join was effectively more of an r bind
 rawva2<-select(rawva1, c(colnames(tsg5)))
 tsg6<-rbind(tsg5,rawva2)
 str(tsg6)
@@ -280,6 +308,10 @@ ggplot(both, aes(x=Cruise, y=density, color=temp_fix))+geom_point()+scale_color_
 #station summary table#####
 done<-full%>%group_by(Site)%>%summarize("mean_temp"=mean(temp_fix, NA.rm=T),"mean_sal"=mean(sal_fix,NA.rm=T)) # sig figs to 4 from TSG
 donedone<-left_join(combooo, done, by="Site")
+#from Jon
+tsg.sum <- donedone %>% group_by(Cruise, across(c(Year))) %>% summarise(Ntsg.miss=n_distinct(Site[is.na(mean_temp)]), Ntsg=n_distinct(Site[!is.na(mean_temp)]))
+tsg.sum <- donedone %>% group_by(Cruise, across(c(Year))) %>% summarise(Ntsg.miss=n_distinct(Site[is.na(mean_temp)]), Ntsg=n_distinct(Site[!is.na(mean_temp)])) %>%
+  mutate(miss.prop = Ntsg.miss/(Ntsg+Ntsg.miss)) %>% arrange(desc(miss.prop))
 donedone<-donedone%>%
   mutate("temp"=ifelse(is.na(temp.1m)==T,mean_temp,temp.1m))%>%
   mutate("sal"=ifelse(is.na(sal.1m)==T,mean_sal,sal.1m))
@@ -287,7 +319,8 @@ donedone<-donedone%>%
 summary(as.factor(donedone[(which(is.na(donedone$temp==T))),4]))
 donedone<-donedone%>%
   mutate("env_data_source"=ifelse(is.na(temp)==F,"TSG","remote sensing")) # rename to temp data source, add in 
-
+#12-16 to do##########
+fe<-tsg2 %>% filter(Year==2004)
 #prep modeled salinity data####
 data=("C:/Users/Andrea.Schmidt/Desktop/for offline/cmems_mod_glo_phy_my_0.083deg_P1D-m_1727396375892.nc")
 #data = ("C:/Users/jessica.perelman/Downloads/salinity.nc")

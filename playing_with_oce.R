@@ -112,11 +112,28 @@ for (i in 1:length(tsgfiles)) {
 
 #########STOPPED HERE 09/27!!!!#########
 #.RAW files############
-ssfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="*.Raw")
-drat<-read.csv(ssfiles[2])
-#note to self first few lines of .raw files are a mess likely bubbles and equilibrating
+sttfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="SAMOS-TSG-Temp")
+stsfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="SAMOS-TSG-SAL")
+drat<-read.csv(sttfiles[1])
+colnames(drat)<-c("Date","Time", "Derivative","TempC","Temp2","idk","idk2","idk3")
+drat2<-read.csv(sttfiles[2])
+colnames(drat2)<-c("Date","Time", "Derivative","TempC","Temp2","idk","idk2","idk3")
+stt<-rbind(drat, drat2)
+stt2<-select(stt, c(Date, Time, TempC))
+stt2<-stt2%>%unite("datetime",Date, Time, sep=" ")%>% mutate(datetime=mdy_hms(datetime))
+
+drat<-read.csv(stsfiles[1])
+colnames(drat)<-c("Date","Time", "Derivative","Salinity","Salinity2","idk","idk2","idk3")
+drat2<-read.csv(stsfiles[2])
+colnames(drat2)<-c("Date","Time", "Derivative","Salinity","Salinity2","idk","idk2","idk3")
+sts<-rbind(drat, drat2)
+sts2<-select(sts, c(Date, Time, Salinity))
+sts2<-sts2%>%unite(datetime, Date:Time, sep=" ")
+
+rawva<-full_join(sts2, stt2)
+#note to self first few lines of .raw files are a mess likely bubbles and equillibrating
 prep_raw_csvs = function(input) {
-  drat<-read.csv(ssfiles[i])
+  drat<-read.csv(ssfiles[i], header=F)
   if(ncol(drat)==17){
   colnames(drat)<-c("Date","Time","Instrument","time_no_sep", "lat_dd","lat_direction","lon_dd","lon_direction","X1","X9","X2.4","Salinity","M","X", "M.1","X.1","hex")
   raw2<-drat%>%
@@ -161,7 +178,7 @@ prep_raw_csvs = function(input) {
       mutate(Conductivity=as.numeric(Conductivity))
   }
   else if(ncol(drat)==1){print("skip")}
-  outname = paste("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/processed_RAW_TSGs/processed_RAW_TSG_",raw2$Year[i],"_",merp, '.csv', sep = "") 
+  outname = paste("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/processed_RAW_TSGs/try2_processed_RAW_TSG_",raw2$Year[i],"_",merp, '.csv', sep = "") 
   write.csv(x=raw2, file=outname)
 }
 
