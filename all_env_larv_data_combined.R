@@ -203,28 +203,10 @@ str(rawva1)#its okay that there loads of NAs, sal and temp measurements were not
 rawva2<-select(rawva1, c(colnames(tsg5)))
 tsg6<-rbind(tsg5,rawva2)
 str(tsg6)
-#####add in 2011 data####
-el<-read.csv("C:/Users/Andrea.Schmidt/Documents/oes1106_1206/OS11-06/sept14_surface_1106.csv")
-el<-el %>% rename("cruise"=V26, "date"= V25, "day_night"=V24, "lon_dd"=V22, 
-                  "lat_dd"=V21,"mean_sal"=V6,"mean_temp"=V4,"dbar"=V1)
-el2<-el%>%
-  mutate(datetime=mdy_hm(V2,tz="HST"))%>%#,format="%m/%d/%y %H:%M")) 
-  mutate(local_datetime=with_tz(datetime, tz="HST"), .keep="all")%>%
-  mutate(date=date(datetime))%>%
-  mutate(Year=year(datetime))%>%
-  mutate(time=separate(as.string(datetime), sep=" "))%>%
-  mutate(TempC=as.numeric(mean_temp))%>%
-  mutate(Salinity=as.numeric(mean_sal))%>%
-  mutate(lat=as.numeric(lat_dd))%>%
-  mutate(Day_Time_Julian=decimal_date(datetime))%>%
-  mutate(lon=as.numeric(lon_dd))
-str(el2)
-el2<-dplyr::select(el2, c(colnames(tsg3)))
-tsg7<-rbind(tsg6,el2)
+
 #####2016 env data####
 sixteen<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/SE-16-06_MOA_Snapped_Compiled copy.csv")
 sixteen<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/SE-16-06_MOA_Snapped_Compiled copy.csv")
-
 str(sixteen)
 meep<-sixteen%>%
   mutate(X=1)%>%
@@ -248,10 +230,10 @@ meep<-sixteen%>%
   #mutate(LAT_DD_START=og_lat/60)%>%
   #mutate(LON_DD_START=(-1*(og_lon/60))) 
 meep2<-dplyr::select(meep, c(colnames(tsg3)))
-tsg8<-rbind(tsg7,meep2)
+tsg7<-rbind(tsg6,meep2)
 
 #kona_map+geom_point(data=meep, aes(x=LON_DD_START, y=LAT_DD_START))
-kona_map+geom_point(data=meep, aes(x=lon_dd, y=lat_dd))
+#kona_map+geom_point(data=meep, aes(x=lon_dd, y=lat_dd))
 
 #joining from Jon#########
 library(tidyverse)
@@ -269,11 +251,11 @@ tsgwhip<-fuzzy_left_join(
 #tsgwhip<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/fuzzy_joined_tsg_1216.csv")
 #time join TSG and mini, site join this to specimen data#######
 #~why are some days having the exact same values???? (se0412-...)
-tsgdfname<-tsg2
-mini_time_join1<-left_join(tsgdfname,mini,join_by(date==Date, between(time, Time.start,Time.end)), relationship="many-to-many")#local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
-tsg10<-mini_time_join1%>%dplyr::select(c(Site, TempC, Salinity))
+tsgdfname<-tsg8
+mini_time_join1<-left_join(tsgdfname,mini,join_by(datetime==Date, between(time, Time.start,Time.end)), relationship="many-to-many")#local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
+tsg10<-mini_time_join1%>%dplyr::select(c(Site, TempC, Salinity))%>%filter(Salinity<40)%>%filter(TempC<40)%>%filter(TempC>0)%>%filter(Salinity>30)
 #mean temp and sal per Site (one value per site)
-tsg11 <- tsgwhip%>%
+tsg11 <- tsg10%>%
   group_by(Site) %>%
   summarise(TempC = mean(TempC, na.rm=T), Salinity= mean(Salinity, na.rm=T))
 tsg12<-left_join(mini_time_join1,tsg11, join_by(Site))
