@@ -455,3 +455,41 @@ full<-full%>%
 kona_map+geom_point(data=full, aes(y=LAT_DD_start, x=LONG_DD_start, size=density, color=ID_morph_and_PCR))+
   scale_color_viridis_d()+
   facet_wrap(~month)
+#new######
+hi_raster <- raster(file.path("C:/Users/Andrea.Schmidt/Documents/se2204_to_se2303.tiff"))
+new<-filter(mas, data.source=="box")
+new %>% group_by(Year)%>%summarize(sum(as.numeric(count)),na.rm=TRUE)
+WHIP_SWDs<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/WHIP_SWDs.csv")
+bet<-read.csv("C:/Users/Andrea.Schmidt/Documents/se2204 net metadata.csv")
+ik<-read.csv("C:/Users/Andrea.Schmidt/Desktop/crusies/HICEAS_23/IKMT Log - Sheet1.csv")
+ik<-ik %>% mutate(lat_deg= as.numeric(substr(Lat.In,1,2)))#http://127.0.0.1:40641/graphics/4ee7ccc4-d91e-43e0-8b31-d427019a6d2c.png
+ik<-ik %>% mutate(lon_deg= as.numeric(substr(Lon.In,1,4)))
+ik<-ik %>% mutate(lat_minsec= as.numeric(substr(Lat.In,3,10)))
+ik<-ik %>% mutate(long_minsec= as.numeric(substr(Lon.In,5,10)))
+ik<-ik %>% mutate(LAT_DD_start= lat_deg+(lat_minsec/60))
+ik<-ik %>% mutate(LONG_DD_start= lon_deg+(long_minsec/60))
+library(stringr)
+ik<-ik%>%mutate(Station=str_pad(ik$Station, 3, pad = "0"))%>%unite("Site",c(Cruise, Station), sep="-")
+ik<-ik%>%add_column("Year"=2023)
+hiceas<-dplyr::select(ik,c(LAT_DD_start, LONG_DD_start,Site, Year))
+mini_whip<-dplyr::select(WHIP_SWDs,c(LAT_DD_start, LONG_DD_start,Site, Year))
+bet<-bet%>%mutate(Year=2022)%>%rename(LAT_DD_start=mouth_underwater_lat_dd, LONG_DD_start=mouth_underwater_long_dd,Site=event_id)
+mini_bet<-dplyr::select(bet,c(LAT_DD_start, LONG_DD_start,Site, Year))
+whip_all<-rbind(hiceas, mini_whip, mini_bet)
+new2<-left_join(new, whip_all)
+oahu_df <- fortify(as.bathy(hi_raster))
+str(oahu_df)
+oahu_map <- ggplot(data=world) +
+  geom_raster(data = oahu_df, aes(x = x, y = y, fill = z)) +labs(fill = "Depth (m)")+
+  scale_fill_gradient(high = "lightskyblue1", low = "cornflowerblue",limits=c(-10000,1000))+
+  new_scale_fill()+
+  scale_fill_continuous(labels = scales::label_number(scale = 1000, suffix = "k"))+
+  geom_sf()+coord_sf(xlim=c(-148,-177), ylim=c(9.99, 31.9))+
+  theme_bw()+theme(axis.ticks.length = unit(0.25, "cm"))+
+  ylab("Latitude")+xlab("Longitude")
+oahu_map+geom_point(data=new2, aes(y=LAT_DD_start, x=LONG_DD_start,color=as.factor(Year)))+scale_color_viridis_d(option="A")
+
+kona_map+
+  geom_point(data=new2, aes(y=LAT_DD_start, x=LONG_DD_start,color=as.factor(Year)))+scale_color_viridis_d()
+
+ggplot(data=new2, aes(y=LAT_DD_start, x=LONG_DD_start, color=as.factor(Year)))+geom_point()
