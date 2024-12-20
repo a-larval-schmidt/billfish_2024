@@ -76,7 +76,6 @@ larv<-re_mas%>%dplyr::select(c("specimen_identification","stage","Site","ID_morp
 #combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/Product1_LarvalBillfish_TowMetadata.csv")
 #combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv")
 combo<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_short12.csv")
-str(comboo)
 comboo<-combo%>%
   unite("dend",c(Date,Time.end),sep=" ",remove = F)%>%
   unite("send",c(Date,Time.start),sep=" ", remove=F)%>%
@@ -135,6 +134,12 @@ tsg1<-rbind(tsg1,b)
 b<-read.csv(tsgcsv[12])
 b<-b[keeps]
 tsg1<-rbind(tsg1,b)
+for(i in seq_along(length(tsgcsv))){
+  x<-read.csv(tsgcsv[i])
+  keeps <- c("Year", "Day_Time_Julian", "Day","TempC","Salinity","datetime","time")
+  b<-x[keeps]
+  b <- rbind(b,x)
+}
 #merge TSG env data#####
 tsg1<-filter(tsg1, Salinity<40)
 tsg1<-filter(tsg1,30<Salinity)
@@ -196,7 +201,7 @@ sbe46<-sbe45%>%
   mutate(lat=as.numeric(Furuno.GP90_Latitude))%>%
   mutate(Day_Time_Julian=decimal_date(date))%>%
   mutate(lon=as.numeric(Furuno.GP90_Longitude ))%>%
-  mutate("datetime"=paste(sbe46$date,sbe46$time))%>%
+  mutate("datetime"=paste(date,time))%>%
   mutate(datetime=ymd_hms(datetime,tz="UTC"))%>%
   mutate(local_datetime=with_tz(datetime,tz="HST"),.keep="all")
 sbe47<-dplyr::select(sbe46, c(colnames(tsg3)))
@@ -273,41 +278,42 @@ meep<-sixteen%>%
   #mutate(LON_DD_START=(-1*(og_lon/60))) 
 meep2<-dplyr::select(meep, c(colnames(tsg3)))
 tsg7<-rbind(tsg6,meep2)
-#joining from Jon#########
-library(tidyverse)
-library(fuzzyjoin)
-tsgwhip<-fuzzy_left_join(
-  tsg2, mini,
-  by = c(
-    "date"="Date",
-    "time" = "Time.start",
-    "time" = "Time.end"
-  ),
-  match_fun = list(`==`, `>=`, `<=`)
-)
-#write.csv(tsgwhip, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/fuzzy_joined_tsg.csv")
 #tsgwhip<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/fuzzy_joined_tsg_1216.csv")
 #time join TSG and mini, site join this to specimen data#######
 #~why are some days having the exact same values???? (se0412-...)
-tsgdfname<-tsg7
-mini_time_join1<-left_join(tsgdfname,mini,join_by(datetime==Date, between(time, Time.start,Time.end)), relationship="many-to-many")#local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
-tsg10<-mini_time_join1%>%dplyr::select(c(Site, TempC, Salinity))%>%filter(Salinity<40)%>%filter(TempC<40)%>%filter(TempC>0)%>%filter(Salinity>30)
+tsg8<-tsg7%>%mutate(date=as.Date(datetime))
+tsgdfname<-tsg8
+#joining from Jon#########
+library(tidyverse)
+library(fuzzyjoin)
+#tsgwhip<-fuzzy_left_join(tsg8, mini,by = c("date"="Date","time" = "Time.start","time" = "Time.end"),match_fun = list(`==`, `>=`, `<=`))
+#write.csv(tsgwhip, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/fuzzy_joined_tsgs_to_product1.csv")
+#tsg_mini<-semi_join(tsgdfname,mini,join_by(date==Date))
+#time_join<-full_join(tsg_mini, mini,join_by(between(time, Time.start,Time.end)), relationship="many-to-many")
+#write.csv(time_join, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/tsgs_joined_to_product1_by_date_AND_time.csv")
+#mini_time_join1<-left_join(tsgdfname,mini,join_by(date==Date, between(time, Time.start,Time.end)), relationship="many-to-many")#local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
+tsg10<-time_join%>%dplyr::select(c(Site, TempC, Salinity))%>%filter(Salinity<40)%>%filter(TempC<40)%>%filter(TempC>0)%>%filter(Salinity>30)
 #mean temp and sal per Site (one value per site)
 tsg11 <- tsg10%>%
   group_by(Site) %>%
   summarise(TempC = mean(TempC, na.rm=T), Salinity= mean(Salinity, na.rm=T))
-tsg12<-left_join(mini_time_join1,tsg11, join_by(Site))
+#tsg12<-left_join(mini_time_join1,tsg11, join_by(Site))
 library(tidyverse)
 library(fuzzyjoin)
-full_site_join<-fuzzy_left_join(combooo,tsg11,
-                          by=(c("Site"="Site")),
-                          match_fun = `==`)#Year, Site, LAT_DD_start,LONG_DD_start,Time.start, Time.end),#EndDateTime, StartDateTime),
-                          #relationship="one-to-one")
-specimen_site_join<-left_join(larv,full_site_join,join_by("Site"=="Site.x"))
+full_site_join<-fuzzy_left_join(combooo,tsg11,by=(c("Site"="Site")),match_fun = `==`)#Year, Site, LAT_DD_start,LONG_DD_start,Time.start, Time.end),#EndDateTime, StartDateTime),
+full_site_join<-left_join(combooo,tsg11,by=c("Site"="Site"))#Year, Site, LAT_DD_start,LONG_DD_start,Time.start, Time.end),#EndDateTime, StartDateTime),
+specimen_site_join<-left_join(full_site_join,larv,join_by("Site"=="Site"))
+#write.csv(specimen_site_join, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/specimen_site_join_121924.csv")
+#presence/absence dataset#######
+pa<-specimen_site_join%>%mutate("billfish_present"=ifelse(is.na(count)==F,T,F))%>%
+  mutate("ta_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Tetrapturus angustirostris",T,F))%>%
+  mutate("mn_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Makaira nigricans",T,F))%>%
+  mutate("xg_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Xiphias gladius",T,F))%>%
+  mutate("ka_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Kajikia audax",T,F))
+pap<-pa%>%distinct(Site,.keep_all = TRUE)
+#env and spec####
 full<-specimen_site_join%>%
   mutate(DateTime=mdy_hm(DateTime))%>%
-  #mutate(Time=hms(Time))%>%
-  #mutate(Time.end=hms(Time.end))%>%
   mutate("moon_date"=suncalc::getMoonIllumination(date = StartDateTime,keep = "phase"))%>%
   mutate("phase"=moon_date$phase)%>%
   mutate("cat_moon"=lunar::lunar.phase(x = StartDateTime, shift=10, name=T))%>%
@@ -315,30 +321,24 @@ full<-specimen_site_join%>%
   mutate(duration=as.numeric(dur, "minutes"))%>%#filter(duration>0 & duration<60)%>%
   mutate("temp_fix"=ifelse(is.na(temp.1m)==T,TempC,temp.1m))%>% # let both exist in their own columns as well for comparison purposes
   mutate("sal_fix"=ifelse(is.na(sal.1m)==T,Salinity, sal.1m))%>%#let both exist in their own columns as well for comparison purposes
-  mutate("density"=count/vol.m3)
+  mutate("density"=count/vol.m3)%>%
+  rename("temp.is"=TempC)%>%
+  rename("sal.is"=Salinity)%>%
+  mutate("TempC_data_source"=ifelse(is.na(temp.1m)==F,"CTD/TSG","NOAA_CRW"))%>% 
+  mutate("Salinity_data_source"=ifelse(is.na(sal.1m)==F,"CTD/TSG","GLORYS_SSS"))%>% 
+  mutate("chla_data_source"=ifelse(is.na(chla)==F,"bottle collections","ESA_OC-CCI")) 
+  
+ggplot(full, aes(x=TempC_data_source, y=density, color=temp_fix))+geom_point()+scale_color_viridis_c(option="turbo")
+ggplot(full, aes(x=Salinity_data_source, y=density, color=sal_fix))+geom_point()+scale_color_viridis_c(option="turbo")
+ggplot(full, aes(x=chla_data_source, y=density, color=chla))+geom_point()+scale_color_viridis_c(option="turbo")
 
-both<-full%>% filter(is.na(temp.1m)==F&is.na(TempC)==F)
-ggplot(full, aes(x=DateTime, y=datetime))+geom_point()#+theme(legend.position="none")
-
-four<-full%>%filter(Year==2004)
-ggplot(both, aes(x=year(DateTime), y=sal_fix,color=Year))+geom_point()#+theme(legend.position="none")
-ggplot(both, aes(x=Habitat, y=density, color=temp_fix))+facet_grid(~ID_morph_and_PCR)+geom_point()+scale_color_viridis_c(option="turbo")
-ggplot(both, aes(x=Cruise, y=temp_fix))+geom_point()
-ggplot(both, aes(x=Cruise, y=density, color=temp_fix))+geom_point()+scale_color_viridis_c(option="turbo")
 #station summary table#####
-done<-full%>%group_by(Site)%>%summarize("mean_temp"=mean(temp_fix, NA.rm=T),"mean_sal"=mean(sal_fix,NA.rm=T)) # sig figs to 4 from TSG
-donedone<-left_join(combooo, done, by="Site")
-#from Jon
-tsg.sum <- donedone %>% group_by(Cruise, across(c(Year))) %>% summarise(Ntsg.miss=n_distinct(Site[is.na(mean_temp)]), Ntsg=n_distinct(Site[!is.na(mean_temp)]))
-tsg.sum <- donedone %>% group_by(Cruise, across(c(Year))) %>% summarise(Ntsg.miss=n_distinct(Site[is.na(mean_temp)]), Ntsg=n_distinct(Site[!is.na(mean_temp)])) %>%
+#full<-full%>%group_by(Site)%>%summarize("mean_temp"=mean(temp_fix, NA.rm=T),"mean_sal"=mean(sal_fix,NA.rm=T)) # sig figs to 4 from TSG
+#donedone<-left_join(combooo, done, by="Site")
+#from Jon: check 
+tsg.sum <- full %>% group_by(Cruise, across(c(Year))) %>% summarise(Ntsg.miss=n_distinct(Site[is.na(temp_fix)]), Ntsg=n_distinct(Site[!is.na(temp_fix)]))
+tsg.sum <- full %>% group_by(Cruise, across(c(Year))) %>% summarise(Ntsg.miss=n_distinct(Site[is.na(temp_fix)]), Ntsg=n_distinct(Site[!is.na(temp_fix)])) %>%
   mutate(miss.prop = Ntsg.miss/(Ntsg+Ntsg.miss)) %>% arrange(desc(miss.prop))
-donedone<-donedone%>%
-  mutate("temp"=ifelse(is.na(temp.1m)==T,mean_temp,temp.1m))%>%
-  mutate("sal"=ifelse(is.na(sal.1m)==T,mean_sal,sal.1m))
-#write.csv(donedone, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_short13.csv")
-summary(as.factor(donedone[(which(is.na(donedone$temp==T))),4]))
-donedone<-donedone%>%
-  mutate("env_data_source"=ifelse(is.na(temp)==F,"TSG","remote sensing")) # rename to temp data source, add in 
 #12-16 to do##########
 fe<-tsg2 %>% filter(Year==2004)
 #prep modeled salinity data####
@@ -531,6 +531,7 @@ product2<-full%>%
   mutate(unique_specimen_identifier=specimen_identification,.keep="unused")%>%
   dplyr::select(!c(data.source,Transect, sample, StartDateTime, EndDateTime))
 #write.csv(product2, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/Billfish_Specimen_Environmenal_Data.csv")
+
 
 ##old############
 nc<- nc_open(data)
