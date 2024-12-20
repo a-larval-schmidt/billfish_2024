@@ -336,82 +336,69 @@ ggplot(full, aes(x=chla_data_source, y=density, color=chla))+geom_point()+scale_
 #full<-full%>%group_by(Site)%>%summarize("mean_temp"=mean(temp_fix, NA.rm=T),"mean_sal"=mean(sal_fix,NA.rm=T)) # sig figs to 4 from TSG
 #donedone<-left_join(combooo, done, by="Site")
 #from Jon: check 
-tsg.sum <- full %>% group_by(Cruise, across(c(Year))) %>% summarise(Ntsg.miss=n_distinct(Site[is.na(temp_fix)]), Ntsg=n_distinct(Site[!is.na(temp_fix)]))
 tsg.sum <- full %>% group_by(Cruise, across(c(Year))) %>% summarise(Ntsg.miss=n_distinct(Site[is.na(temp_fix)]), Ntsg=n_distinct(Site[!is.na(temp_fix)])) %>%
   mutate(miss.prop = Ntsg.miss/(Ntsg+Ntsg.miss)) %>% arrange(desc(miss.prop))
+ggplot(tsg.sum, aes(x=Cruise, y=miss.prop))+geom_col()+ylim(c(0,1))
 #12-16 to do##########
-fe<-tsg2 %>% filter(Year==2004)
+#nothing cuz NO larvae at all form that cruise
 #prep modeled salinity data####
-data=("C:/Users/Andrea.Schmidt/Desktop/for offline/cmems_mod_glo_phy_my_0.083deg_P1D-m_1727396375892.nc")
-#data = ("C:/Users/jessica.perelman/Downloads/salinity.nc")
-sal <-brick(data, varname = "so") # double check this is the actual variable name
-NAvalue(sal) <- -9999 # for whatever reason, the "no value" grid cells were stored as NA rather than a numeric in the glorys dataset, so you have to reclassify these.
-mini<-mini2%>%
-  filter(is.na(LONG_DD_start)==F)%>%
-  filter(is.na(LAT_DD_start)==F)
-  
-mini$GLORYS_sal <- NA
-
-for(i in 1:nlayers(sal)) {
-  
-  # i = 291
-  year=as.numeric(substr(names(sal[[i]]),2,5))
-  month=as.numeric(substr(names(sal[[i]]),7,8))
-  day=as.numeric(substr(names(sal[[i]]),10,11))
-  ymd = as.Date(as.POSIXct(ymd(paste(year,month,day)), tz = "HST"), tz = "HST")
-  
-  idx <- which(as.Date(mini$StartDateTime) == ymd)
-  
-  if (length(idx)>0){
-    
-    pts <- SpatialPoints(mini[idx,c('LONG_DD_start', 'LAT_DD_start')], crs(sal))
-    mini$GLORYS_sal[idx] <- raster::extract(sal[[i]], pts)
-    
-  }
-  else if (length(idx)==0) {}
-  
-  print(paste("Completed",i,"of",nlayers(sal),"layers"))
-  
-}
-
-saveRDS(mini, file = "mini_sal_GLORYS.rds")
-#salty<-combooo%>%dplyr::select(c(LONG_DD_start,LAT_DD_start,sal.1m))
-#mini3<-left_join(mini, salty)
-minimini#<-mini%>%dplyr::select(c(GLORYS_sal, Site))
-donedone<-left_join(donedone, minimini, by="Site")
-donedone_glorys<-donedone%>%
-  mutate("sal_data_source"=ifelse(is.na(sal)==T,"Modelled Salinity Data from GLORYS",'In situ measurement'),.keep="all")%>%
-  mutate("salinity"=ifelse(is.na(sal)==T,GLORYS_sal,sal),.keep="all")%>%
+# data=("C:/Users/Andrea.Schmidt/Desktop/for offline/cmems_mod_glo_phy_my_0.083deg_P1D-m_1727396375892.nc")
+# #data = ("C:/Users/jessica.perelman/Downloads/salinity.nc")
+# sal <-brick(data, varname = "so") # double check this is the actual variable name
+# NAvalue(sal) <- -9999 # for whatever reason, the "no value" grid cells were stored as NA rather than a numeric in the glorys dataset, so you have to reclassify these.
+# mini<-mini2%>%
+#   filter(is.na(LONG_DD_start)==F)%>%
+#   filter(is.na(LAT_DD_start)==F)
+#   
+# mini$GLORYS_sal <- NA
+# 
+# for(i in 1:nlayers(sal)) {
+#   
+#   # i = 291
+#   year=as.numeric(substr(names(sal[[i]]),2,5))
+#   month=as.numeric(substr(names(sal[[i]]),7,8))
+#   day=as.numeric(substr(names(sal[[i]]),10,11))
+#   ymd = as.Date(as.POSIXct(ymd(paste(year,month,day)), tz = "HST"), tz = "HST")
+#   
+#   idx <- which(as.Date(mini$StartDateTime) == ymd)
+#   
+#   if (length(idx)>0){
+#     
+#     pts <- SpatialPoints(mini[idx,c('LONG_DD_start', 'LAT_DD_start')], crs(sal))
+#     mini$GLORYS_sal[idx] <- raster::extract(sal[[i]], pts)
+#     
+#   }
+#   else if (length(idx)==0) {}
+#   
+#   print(paste("Completed",i,"of",nlayers(sal),"layers"))
+#   
+# }
+# 
+# saveRDS(mini, file = "mini_sal_GLORYS.rds")
+#work with modelled salinity data#####
+salty<-readRDS("mini_sal_GLORYS.rds")
+mini_salty<-salty%>%dplyr::select(c(GLORYS_sal,Site))
+donedone_glorys<-left_join(full, mini_salty,relationship = "many-to-many")
+donedone_glorys<-donedone_glorys%>%
+  mutate("sal.1m"=ifelse(is.na(sal.1m)==T,GLORYS_sal,sal.is),.keep="all")%>%
   distinct(Site, .keep_all=T)
 #write.csv(minimini, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/GLORYS_sal_matched_to_Site.csv")
 ##add sst##############################
-summary(as.factor(donedone_glorys[(which(is.na(donedone_glorys$salinity==T))),4]))
 f<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/WHIP_SWDs.csv")
 str(f)
 ff<-f%>%dplyr::select(c(Site,SST_Sat))
 d<-ff%>%full_join(donedone_glorys,ff, by="Site")
-dd<-d%>%
-  mutate("temp_data_source"=ifelse(is.na(sal)==T,"SST Data from CRW",'In situ measurement'),.keep="all")%>%
-  mutate("temp"=ifelse(is.na(temp)==T,SST_Sat,temp), .keep="all")
-#write.csv(dd, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_short15.csv")
+dd<-d%>%mutate("CRW_SST"=ifelse(is.na(temp.1m)==T,SST_Sat,temp.is), .keep="all")
 #add chla from Jessie!!!!!####
-ddd<-dd%>%mutate(Date=mdy(Date))
-mini<-ddd%>%dplyr::select(c(LAT_DD_start,LONG_DD_start,Site,Date))
-summary(as.factor(dd[(which(is.na(dd$chla==T))),4]))
-summary(as.factor(dd[(which(is.na(dd$chla==T))),7]))
-summary(dd$LAT_DD_start)
-summary(dd$LONG_DD_start)
 library(raster)
 library(tidyverse)
 library(sp)
 library(sf)
 library(reshape2)
-
 setwd("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/")
-
+df<-dd
 # read in dataset
-df <- read.csv("combo_whip_slick_short16.csv")
-df$Date = as.Date(df$Date, format = "%m/%d/%Y")
+df$Date = format(dd$Date, format = "%m/%d/%Y")
 
 # read in 8-day 4km ocean color data (.nc file)
 data = "ESA_OC_CCI_chla_kd490_1997_2021_8day.nc"
@@ -449,11 +436,12 @@ d=as.numeric(substr(names(chlor),10,11))
 df2 = as.data.frame(ymd(paste(y,m,d)))
 names(df2) <- "date"
 
-setDT(df1)[,DT_DATE := Date] # name of date column in your dataset
+setDT(df1)[,DT_DATE := DateTime] # name of date column in your dataset
 setDT(df2)[,DT_DATE := date] # name of date column in df2
 
 # merge d1 and df2 by matching the nearest date from df2 (ocean color 8-day dates) to the date in df1 (your data)
-merged <- df2[df1,on=.(date=DT_DATE),roll="nearest"]
+df11<-df1%>%dplyr::select(!moon_date)
+merged <- df2[df11,on=.(date=DT_DATE),roll="nearest"]
 df_8day = merged[,c("Date","DT_DATE","LAT_DD_start","LONG_DD_start")]
 
 # note 1997 data only goes back to 09/1997 but the cruise for that year is 04/1997, so wonʻt have chlor data for that cruise
@@ -494,27 +482,25 @@ for(i in 1:nlayers(chlor)) {
 
 # merge matched ocean color back with full dataframe
 duh = left_join(df, df_8day[,-"DT_DATE"], by = c("Date","LONG_DD_start", "LAT_DD_start"))
-#duh<-full_join(dd, all_env_df)#, relationship="one-to-one")
-duh2<-duh%>%
-  mutate("temp_data_source"=ifelse(is.na(sal)==T,"8 day ESA Chlorophyll",'In situ measurement'),.keep="all")%>%
-  mutate("chla_mixed"=ifelse(is.na(chla)==T,chlor_8day,chla))%>%
-  distinct(Site,.keep_all = T)
-summary(as.factor(duh2[(which(is.na(duh2$chla_mixed==T))),6]))
+duh2<-duh%>%mutate("chla"=ifelse(is.na(chla)==T,chlor_8day,chla))%>%distinct(Site,.keep_all = T)
 #match monthly ocean color data to provide the more general productivity of the area at broader timescales 
 #run this script=bathy_HI_30m_buffered_poly_1km.R
 #You should be able to run the same script and just change the "data" file to the monthly file and change the "8day" classifiers to "monthly."
 #final format for matching####
-combo16<-duh2%>%
-  #dplyr::select(!c(chla_ESA_CCIOceanColour,sal,mean_sal,mean_temp,SST_Sat,GLORYS_sal, GLORYS_sal.x, GLORYS_sal.y))%>%
-  mutate(temp.mixed.data=temp,.keep="unused")%>% # allow for TSG and remotse sensing in  their own columns (fix in preceeding dfs)
-  mutate(sal.mixed.data=salinity, .keep = "unused")%>%
-  mutate(chla.mixed.data=chla_mixed, .keep = "unused")%>%
-  mutate(lunar_illumination=lunar.illumination(mdy(Date)), .keep="all")%>%
-  mutate("both_temp"=ifelse((is.na(SST_Sat)==F|is.na(temp)==F),"both","singleton"))%>%
-  mutate("both_sal"=ifelse((is.na(GLORYS_sal)==F|is.na(sal)==F),"both","singleton"))%>%
-  mutate("both_chla"=ifelse((is.na(chla)==F|is.na(chlor_8day)==F),"both","singleton"))%>%
-  distinct(Site,.keep_all = T)
-#write.csv(combo16, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_short16.csv")
+duh3<-as.data.frame(duh2)
+duh4<-duh3%>%dplyr::select(!c(specimen_identification,stage, ID_morph_and_PCR,data.source, count, comb_length, length_occurence))
+#write.csv(duh4, "C:/github/billfish_2024/Deliverable3_1219.csv")
+duh5<-duh4%>%left_join(larv, duh4,  by="Site")
+#write.csv(duh5, "C:/github/billfish_2024/Specimen_and_Env_1219.csv")
+duh6<-full_join(larv, duh4,  by="Site")
+pa<-duh6%>%mutate("billfish_present"=ifelse(is.na(count)==F,T,F))%>%
+  mutate("ta_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Tetrapturus angustirostris",T,F))%>%
+  mutate("mn_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Makaira nigricans",T,F))%>%
+  mutate("xg_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Xiphias gladius",T,F))%>%
+  mutate("ka_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Kajikia audax",T,F))
+pap<-pa%>%distinct(Site,.keep_all = TRUE)
+#write.csv(pap, "C:/github/billfish_2024/PA_Env_1219.csv")
+
 ##plot tests######
 specimen_site_join<-left_join(larv, combo16, by="Site")
 full<-specimen_site_join%>%
