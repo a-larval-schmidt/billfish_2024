@@ -1,5 +1,10 @@
 
-#TO DO: analysis section, look for correlations####
+#TO DO: 12/20 #######
+##in situ vs remotely sensed data products!!!
+
+
+
+#analysis section, look for correlations
 ##notes from meeting with justin##
 #sept/nov no fish... july is where we start seeing uncertainty in this
 #peak is at 25
@@ -31,6 +36,7 @@ library(stringr)
 
 ##larval data read in#######
 mas<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/bf_main_20241122.csv")
+mas<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/bf_main_20241217.csv")
 og<-filter(mas, data.source!="box")
 og %>% group_by(taxa)%>%summarize(sum(as.numeric(count)),na.rm=TRUE)
 mas %>% group_by(taxa)%>%summarize(sum(as.numeric(count)),na.rm=TRUE) 
@@ -45,6 +51,9 @@ mas2<-mas %>%
                                                                                                 ifelse(ID.from.PCR2=="Unk.Istiophoridae", "Unk.Istiophoridae",taxa))))))
 
 mas2 %>%group_by(taxa)%>%summarize(sum(count),na.rm=TRUE) #values match those of bff; this is an UNDER COUNT
+mas2 %>%distinct(Site, .keep_all = T)%>%group_by(ID_morph_and_PCR)%>%summarize(sum(count),na.rm=TRUE) #values match those of bff; this is an UNDER COUNT
+mas%>%distinct(Site, .keep_all = T)%>%group_by(taxa)%>%summarize(sum(count),na.rm=TRUE) #values match those of bff; this is an UNDER COUNT
+
 mas2%>%group_by(taxa)%>%summarize(sum(as.numeric(unknown.sizes)),na.rm=TRUE) #values match those of bff; this is an UNDER COUNT
 
 mas_long<-mas2%>%
@@ -70,6 +79,10 @@ re_mas<-re_mas%>%
   mutate("comb_length"=ifelse(is.na(paper_length_num)==T,dre_length,paper_length_num))%>%
   mutate("freq_check"=length_occurence+unknown.sizes)
 larv<-re_mas%>%dplyr::select(c("specimen_identification","stage","Site","ID_morph_and_PCR","data.source", "count","comb_length","length_occurence"))
+for_counting<-re_mas%>%distinct(Site, .keep_all=T)
+for_counting%>%
+  group_by(ID_morph_and_PCR)%>%
+  summarise(count=sum(count), na.rm=T, freq=sum(length_occurence),na.rm=T)
 
 ##metadatasheet as combo then subset to mini####
 #add station number information for each cruise by matching start/end times of tows in combo to each cruise datasheet
@@ -134,12 +147,7 @@ tsg1<-rbind(tsg1,b)
 b<-read.csv(tsgcsv[12])
 b<-b[keeps]
 tsg1<-rbind(tsg1,b)
-for(i in seq_along(length(tsgcsv))){
-  x<-read.csv(tsgcsv[i])
-  keeps <- c("Year", "Day_Time_Julian", "Day","TempC","Salinity","datetime","time")
-  b<-x[keeps]
-  b <- rbind(b,x)
-}
+#for(i in seq_along(length(tsgcsv))){x<-read.csv(tsgcsv[i])keeps <- c("Year", "Day_Time_Julian", "Day","TempC","Salinity","datetime","time")b<-x[keeps]b <- rbind(b,x)}
 #merge TSG env data#####
 tsg1<-filter(tsg1, Salinity<40)
 tsg1<-filter(tsg1,30<Salinity)
@@ -208,8 +216,8 @@ sbe47<-dplyr::select(sbe46, c(colnames(tsg3)))
 tsg5<-rbind(tsg4,sbe47)
 tsg5<-filter(tsg5, Salinity<40)
 tsg5<-filter(tsg5,30<Salinity)
-tsg5<-filter(tsg5, TempC<38)
-tsg5<-filter(tsg5,20<TempC)
+tsg5<-filter(tsg5, TempC<40)
+tsg5<-filter(tsg5,0<TempC)
 str(tsg5)
 #rawfiles####
 sttfiles <- dir("~/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/", recursive=TRUE, full.names=TRUE, pattern="SAMOS-TSG-Temp")
@@ -248,8 +256,8 @@ tsg6<-rbind(tsg5,rawva2)
 str(tsg6)
 tsg6<-filter(tsg6, Salinity<40)
 tsg6<-filter(tsg6,30<Salinity)
-tsg6<-filter(tsg6, TempC<38)
-tsg6<-filter(tsg6,20<TempC)
+tsg6<-filter(tsg6, TempC<40)
+tsg6<-filter(tsg6,0<TempC)
 #####2016 env data####
 sixteen<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/SE-16-06_MOA_Snapped_Compiled copy.csv")
 sixteen<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/HistoricCruiseData_ChrisTokita20190827/SE-16-06_MOA_Snapped_Compiled copy.csv")
@@ -288,8 +296,8 @@ library(tidyverse)
 library(fuzzyjoin)
 #tsgwhip<-fuzzy_left_join(tsg8, mini,by = c("date"="Date","time" = "Time.start","time" = "Time.end"),match_fun = list(`==`, `>=`, `<=`))
 #write.csv(tsgwhip, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/fuzzy_joined_tsgs_to_product1.csv")
-#tsg_mini<-semi_join(tsgdfname,mini,join_by(date==Date))
-#time_join<-full_join(tsg_mini, mini,join_by(between(time, Time.start,Time.end)), relationship="many-to-many")
+tsg_mini<-semi_join(tsgdfname,mini,join_by(date==Date))
+time_join<-full_join(tsg_mini, mini,join_by(between(time, Time.start,Time.end)), relationship="many-to-many")
 #write.csv(time_join, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/tsgs_joined_to_product1_by_date_AND_time.csv")
 #mini_time_join1<-left_join(tsgdfname,mini,join_by(date==Date, between(time, Time.start,Time.end)), relationship="many-to-many")#local_datetime<=EndDateTime, local_datetime>=StartDateTime)) #join-by closest value
 tsg10<-time_join%>%dplyr::select(c(Site, TempC, Salinity))%>%filter(Salinity<40)%>%filter(TempC<40)%>%filter(TempC>0)%>%filter(Salinity>30)
@@ -302,17 +310,9 @@ library(tidyverse)
 library(fuzzyjoin)
 full_site_join<-fuzzy_left_join(combooo,tsg11,by=(c("Site"="Site")),match_fun = `==`)#Year, Site, LAT_DD_start,LONG_DD_start,Time.start, Time.end),#EndDateTime, StartDateTime),
 full_site_join<-left_join(combooo,tsg11,by=c("Site"="Site"))#Year, Site, LAT_DD_start,LONG_DD_start,Time.start, Time.end),#EndDateTime, StartDateTime),
-specimen_site_join<-left_join(full_site_join,larv,join_by("Site"=="Site"))
 #write.csv(specimen_site_join, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/specimen_site_join_121924.csv")
-#presence/absence dataset#######
-pa<-specimen_site_join%>%mutate("billfish_present"=ifelse(is.na(count)==F,T,F))%>%
-  mutate("ta_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Tetrapturus angustirostris",T,F))%>%
-  mutate("mn_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Makaira nigricans",T,F))%>%
-  mutate("xg_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Xiphias gladius",T,F))%>%
-  mutate("ka_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Kajikia audax",T,F))
-pap<-pa%>%distinct(Site,.keep_all = TRUE)
-#env and spec####
-full<-specimen_site_join%>%
+#env####
+full<-full_site_join%>%
   mutate(DateTime=mdy_hm(DateTime))%>%
   mutate("moon_date"=suncalc::getMoonIllumination(date = StartDateTime,keep = "phase"))%>%
   mutate("phase"=moon_date$phase)%>%
@@ -321,24 +321,34 @@ full<-specimen_site_join%>%
   mutate(duration=as.numeric(dur, "minutes"))%>%#filter(duration>0 & duration<60)%>%
   mutate("temp_fix"=ifelse(is.na(temp.1m)==T,TempC,temp.1m))%>% # let both exist in their own columns as well for comparison purposes
   mutate("sal_fix"=ifelse(is.na(sal.1m)==T,Salinity, sal.1m))%>%#let both exist in their own columns as well for comparison purposes
-  mutate("density"=count/vol.m3)%>%
+  #mutate("density"=count/vol.m3)%>%
   rename("temp.is"=TempC)%>%
-  rename("sal.is"=Salinity)%>%
-  mutate("TempC_data_source"=ifelse(is.na(temp.1m)==F,"CTD/TSG","NOAA_CRW"))%>% 
-  mutate("Salinity_data_source"=ifelse(is.na(sal.1m)==F,"CTD/TSG","GLORYS_SSS"))%>% 
-  mutate("chla_data_source"=ifelse(is.na(chla)==F,"bottle collections","ESA_OC-CCI")) 
-  
-ggplot(full, aes(x=TempC_data_source, y=density, color=temp_fix))+geom_point()+scale_color_viridis_c(option="turbo")
-ggplot(full, aes(x=Salinity_data_source, y=density, color=sal_fix))+geom_point()+scale_color_viridis_c(option="turbo")
-ggplot(full, aes(x=chla_data_source, y=density, color=chla))+geom_point()+scale_color_viridis_c(option="turbo")
+  rename("sal.is"=Salinity)
 
 #station summary table#####
 #full<-full%>%group_by(Site)%>%summarize("mean_temp"=mean(temp_fix, NA.rm=T),"mean_sal"=mean(sal_fix,NA.rm=T)) # sig figs to 4 from TSG
 #donedone<-left_join(combooo, done, by="Site")
 #from Jon: check 
 tsg.sum <- full %>% group_by(Cruise, across(c(Year))) %>% summarise(Ntsg.miss=n_distinct(Site[is.na(temp_fix)]), Ntsg=n_distinct(Site[!is.na(temp_fix)])) %>%
-  mutate(miss.prop = Ntsg.miss/(Ntsg+Ntsg.miss)) %>% arrange(desc(miss.prop))
+  mutate(miss.prop =100*(1-(Ntsg.miss/(Ntsg+Ntsg.miss))))%>%arrange(miss.prop)
+tsg.sum<-tsg.sum%>%
+  filter(!is.na(Year))%>%
+  rename("Number of Stations Missing TSG Data"=Ntsg.miss, "Number of TSG Files availible"=Ntsg)%>%
+  mutate("Percentage of Stations with TSG Data"=round(miss.prop,1), .keep="unused")
+library(kableExtra)
+tsg.sum%>%kbl()%>%kable_styling()
 ggplot(tsg.sum, aes(x=Cruise, y=miss.prop))+geom_col()+ylim(c(0,1))
+
+#TS space#######
+specimen_join<-left_join(larv,full,join_by("Site"=="Site")) #want larv into sites since the focus is on sites and then just if a bf was found there
+ggplot(specimen_join, aes(x=temp.1m, y=sal.1m, color=ID_morph_and_PCR))+geom_point(size=3, alpha=0.6)+
+  scale_color_viridis_d()+ylab("Salinity")+xlab("Temperature °C")+labs(color = "Species Identity")+
+  theme(axis.title = element_text(size=20),legend.title= element_text(size=20),legend.text = element_text(size=20))
+#kona map#####
+xg<-specimen_join%>%filter(ID_morph_and_PCR=="Xiphias gladius")
+kona_map+geom_point(data=xg, aes(x=LONG_DD_start, y=LAT_DD_start, color=temp.1m, size=(count/vol.m3)))+
+  labs(color="Temperature °C", size="Larval density per cubic meter of seawater")+
+  theme(legend.text = element_text(size=14))+scale_color_viridis_c(option="turbo")
 #12-16 to do##########
 #nothing cuz NO larvae at all form that cruise
 #prep modeled salinity data####
@@ -376,10 +386,11 @@ ggplot(tsg.sum, aes(x=Cruise, y=miss.prop))+geom_col()+ylim(c(0,1))
 # 
 # saveRDS(mini, file = "mini_sal_GLORYS.rds")
 #work with modelled salinity data#####
-salty<-readRDS("mini_sal_GLORYS.rds")
+salty<-readRDS("C:/github/billfish_2024/mini_sal_GLORYS.rds")
 mini_salty<-salty%>%dplyr::select(c(GLORYS_sal,Site))
 donedone_glorys<-left_join(full, mini_salty,relationship = "many-to-many")
 donedone_glorys<-donedone_glorys%>%
+  mutate("Salinity_data_source"=ifelse(is.na(sal.1m)==F,"CTD/TSG","GLORYS_SSS"))%>% 
   mutate("sal.1m"=ifelse(is.na(sal.1m)==T,GLORYS_sal,sal.is),.keep="all")%>%
   distinct(Site, .keep_all=T)
 #write.csv(minimini, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/GLORYS_sal_matched_to_Site.csv")
@@ -388,7 +399,10 @@ f<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/WHIP_SWDs.csv")
 str(f)
 ff<-f%>%dplyr::select(c(Site,SST_Sat))
 d<-ff%>%full_join(donedone_glorys,ff, by="Site")
-dd<-d%>%mutate("CRW_SST"=ifelse(is.na(temp.1m)==T,SST_Sat,temp.is), .keep="all")
+dd<-d%>%  mutate("TempC_data_source"=ifelse(is.na(temp.1m)==F,"CTD/TSG","NOAA_CRW"))%>%
+  mutate("CRW_SST"=ifelse(is.na(temp.1m)==T,SST_Sat,temp.is), .keep="all")
+
+
 #add chla from Jessie!!!!!####
 library(raster)
 library(tidyverse)
@@ -396,7 +410,6 @@ library(sp)
 library(sf)
 library(reshape2)
 setwd("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/")
-df<-dd
 # read in dataset
 df$Date = format(dd$Date, format = "%m/%d/%Y")
 
@@ -428,7 +441,7 @@ kd490_masked <- raster::mask(kd490, bathy_buffered_poly_1km, inverse = TRUE)
 
 # create new column of nearest 8-day value
 library(data.table)
-
+df<-dd
 df1 = df
 y=as.numeric(substr(names(chlor),2,5))
 m=as.numeric(substr(names(chlor),7,8))
@@ -436,21 +449,26 @@ d=as.numeric(substr(names(chlor),10,11))
 df2 = as.data.frame(ymd(paste(y,m,d)))
 names(df2) <- "date"
 
-setDT(df1)[,DT_DATE := DateTime] # name of date column in your dataset
+df1<-df1%>%dplyr::select(!moon_date)%>%
+  mutate("Date"=ymd(Date))
+setDT(df1)[,DT_DATE := Date] # name of date column in your dataset
 setDT(df2)[,DT_DATE := date] # name of date column in df2
 
 # merge d1 and df2 by matching the nearest date from df2 (ocean color 8-day dates) to the date in df1 (your data)
-df11<-df1%>%dplyr::select(!moon_date)
-merged <- df2[df11,on=.(date=DT_DATE),roll="nearest"]
+merged <- df2[df1,on=.(date=DT_DATE),roll="nearest"]
 df_8day = merged[,c("Date","DT_DATE","LAT_DD_start","LONG_DD_start")]
 
 # note 1997 data only goes back to 09/1997 but the cruise for that year is 04/1997, so wonʻt have chlor data for that cruise
-df_8day = subset(df_8day, Date > "1997-12-31")
+df_8day<-filter(df_8day, DT_DATE > "1997-12-31")
 
 # create empty columns for chlorophyll and kd490
 df_8day$chlor_8day <- NA
 df_8day$kd490_8day <- NA
 
+df_8day<-df_8day%>%
+  filter(is.na(LAT_DD_start)!=T)%>%
+  filter(is.na(LONG_DD_start)!=T)
+  
 for(i in 1:nlayers(chlor)) {
   
   # i = 30
@@ -479,19 +497,54 @@ for(i in 1:nlayers(chlor)) {
   print(paste("Completed",i,"of",nlayers(chlor_masked),"layers"))
   
 }
-
+#write.csv(df_8day, "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/df_8day.csv")
 # merge matched ocean color back with full dataframe
-duh = left_join(df, df_8day[,-"DT_DATE"], by = c("Date","LONG_DD_start", "LAT_DD_start"))
-duh2<-duh%>%mutate("chla"=ifelse(is.na(chla)==T,chlor_8day,chla))%>%distinct(Site,.keep_all = T)
+duh = left_join(df1, df_8day[,-"DT_DATE"], by = c("Date"))#,"LONG_DD_start", "LAT_DD_start"))
+dull=left_join(df1, df_8day[,-"DT_DATE"],by =c('LONG_DD_start', 'LAT_DD_start'),relationship = "many-to-many")
+duh2<-dull%>%
+  mutate("chla_data_source"=ifelse(is.na(chla)==F,"bottle collections","ESA_OC-CCI")) %>%
+  mutate("chla"=ifelse(is.na(chla)==T,chlor_8day,chla))#%>%
+# distinct(Site,.keep_all = T)
 #match monthly ocean color data to provide the more general productivity of the area at broader timescales 
 #run this script=bathy_HI_30m_buffered_poly_1km.R
 #You should be able to run the same script and just change the "data" file to the monthly file and change the "8day" classifiers to "monthly."
+fuck<-tibble(duh2$DT_DATE, duh2$Date, duh2$chla, duh2$chlor_8day)
+fuck<-fuck%>%rename(c("DT"=`duh2$DT_DATE`,"Dx"=`duh2$Date`,"C"=`duh2$chla`, "C8"=`duh2$chlor_8day`))
+
 #final format for matching####
+#presence/absence dataset#######
 duh3<-as.data.frame(duh2)
-duh4<-duh3%>%dplyr::select(!c(specimen_identification,stage, ID_morph_and_PCR,data.source, count, comb_length, length_occurence))
+duh3<-duh3%>%
+  rename(Date=Date.x)%>%
+  distinct(Site,.keep_all = TRUE)
+#write.csv(duh3, "C:/github/billfish_2024/env_all_1220.csv")
+#plot tsg vs sat
+ggplot(duh3, aes(x=temp.is, y=CRW_SST))+geom_point()
+ggplot(duh3, aes(x=sal.is, y=GLORYS_sal))+geom_point()
+ggplot(duh3, aes(x=chla, y=chlor_8day))+geom_point()
+
+ggplot(duh3, aes(x=DateTime, y=temp.is))+geom_point()
+ggplot(duh3, aes(y=sal.is, x=DateTime))+geom_point()
+ggplot(duh3, aes(x=DateTime, y=chlor_8day))+geom_point()
+ggplot(duh3, aes(x=DateTime, y=))+geom_point()
+
+######
+specimen_site_join<-left_join(duh3,larv,join_by("Site"=="Site")) #want larv into sites since the focus is on sites and then just if a bf was found there
+
+##pa###
+pa<-specimen_site_join%>%mutate("billfish_present"=ifelse(is.na(count)==F,T,F))%>%
+  mutate("ta_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Tetrapturus angustirostris",T,F))%>%
+  mutate("mn_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Makaira nigricans",T,F))%>%
+  mutate("xg_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Xiphias gladius",T,F))%>%
+  mutate("ka_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Kajikia audax",T,F))
+pap<-pa%>%distinct(Site,.keep_all = TRUE) #write.csv(pap, "C:/github/billfish_2024/Sites_Env_bf_PA_1220.csv")
+kona_map+geom_point(data=pap, aes(x=LONG_DD_start, y=LAT_DD_start, color=temp.1m))+facet_wrap(~billfish_present)+scale_color_viridis_c(option="turbo")
+kona_map+geom_point(data=pap, aes(x=LONG_DD_start, y=LAT_DD_start, color=Habitat))+facet_wrap(~billfish_present)+scale_color_manual(values=c("purple","orange"))
+
+#duh4<-duh3%>%dplyr::select(!c(specimen_identification,stage, ID_morph_and_PCR,data.source, count, comb_length, length_occurence))
 #write.csv(duh4, "C:/github/billfish_2024/Deliverable3_1219.csv")
-duh5<-duh4%>%left_join(larv, duh4,  by="Site")
-#write.csv(duh5, "C:/github/billfish_2024/Specimen_and_Env_1219.csv")
+duh5<-left_join(larv, duh3,  by="Site") #now we join site data into larvae so each line gets its own environmental data
+#write.csv(duh5, "C:/github/billfish_2024/Specimen_and_Env_1220.csv")
 duh6<-full_join(larv, duh4,  by="Site")
 pa<-duh6%>%mutate("billfish_present"=ifelse(is.na(count)==F,T,F))%>%
   mutate("ta_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Tetrapturus angustirostris",T,F))%>%
@@ -500,16 +553,37 @@ pa<-duh6%>%mutate("billfish_present"=ifelse(is.na(count)==F,T,F))%>%
   mutate("ka_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Kajikia audax",T,F))
 pap<-pa%>%distinct(Site,.keep_all = TRUE)
 #write.csv(pap, "C:/github/billfish_2024/PA_Env_1219.csv")
+#12/20 to do###############
+#full<-read.csv("C:/github/billfish_2024/Specimen_and_Env_1219.csv")
+#env<-read.csv("C:/github/billfish_2024/Deliverable3_1219.csv")
+#pa<-read.csv("C:/github/billfish_2024/PA_Env_1219.csv")
+#make plots of TSG vs remote sensed data
+#full<-full%>%mutate(DateTime=mdy_hm(DateTime))%>%mutate(Time=hms(Time))%>%mutate(Time.end=hms(Time.end))%>%mutate("larval_density_per_cubic_meter"=count/vol.m3)%>%dplyr::select(!SST_Sat)
+ggplot(full, aes(y=larval_density_per_cubic_meter, x=sal.1m, shape=ID_morph_and_PCR))+xlim(c(34,543.5))+geom_point(size=3)+scale_color_viridis_c(option="turbo")
+ggplot(full, aes(y=larval_density_per_cubic_meter, x=GLORYS_sal, shape=ID_morph_and_PCR))+xlim(c(34,35.5))+geom_point(size=3)+scale_color_viridis_c(option="turbo")
+ggplot(full, aes(y=larval_density_per_cubic_meter, x=sal.is, shape=ID_morph_and_PCR))+xlim(c(3,35.5))+geom_point(size=3)+scale_color_viridis_c(option="turbo")
 
-##plot tests######
-specimen_site_join<-left_join(larv, combo16, by="Site")
-full<-specimen_site_join%>%
-  mutate(DateTime=mdy_hm(DateTime))%>%
-  mutate(Time=hms(Time))%>%
-  mutate(Time.end=hms(Time.end))%>%
-  mutate("larval_density_per_cubic_meter"=count/vol.m3)
-full<-full%>%filter(is.na(env_data_source)==F)
-ggplot(full, aes(x=Cruise, y=larval_density_per_cubic_meter, color=sal.1m))+geom_point()+scale_color_viridis_c(option="turbo")+facet_grid(~env_data_source)
+ggplot(full, aes(x=sal.1m, y=GLORYS_sal, color=Salinity_data_source))+geom_point()+xlim(c(34,35.5))
+ggplot(full, aes(x=sal.1m, y=sal_fix, color=Salinity_data_source))+geom_point()+xlim(c(34,35.5))
+ggplot(full, aes(x=sal.1m, y=sal.is, color=Salinity_data_source))+geom_point()+xlim(c(34,35.5))
+ggplot(full, aes(x=GLORYS_sal, y=sal.is, color=Salinity_data_source))+geom_point()+xlim(c(34,35.5))
+
+#figure out why data type labels are fucked up (fix when adding specifc data to df????)
+ggplot(full, aes (y=larval_density_per_cubic_meter, x=temp.1m,  color=TempC_data_source))+xlim(23,30)+geom_point(size=3)#+scale_color_viridis_c(option="turbo")
+ggplot(full, aes(y=larval_density_per_cubic_meter, x=temp.is, color=TempC_data_source))+xlim(23,30)+geom_point(size=3)#+scale_color_viridis_c(option="turbo")
+ggplot(full, aes(y=larval_density_per_cubic_meter, x=CRW_SST,  color=TempC_data_source))+xlim(23,30)+geom_point(size=3)#+scale_color_viridis_c(option="turbo")
+
+ggplot(full, aes(x=CRW_SST, y=temp.1m, color=TempC_data_source))+geom_point()
+ggplot(full, aes(y=temp.1m, x=temp.is,color=TempC_data_source))+geom_point()
+
+ggplot(full, aes(x=SST_Sat, y=temp.1m, color=TempC_data_source))+geom_point()
+ggplot(full, aes(x=SST_Sat, y=CRW_SST))+geom_point()
+ggplot(full, aes(x=SST_Sat, y=temp.is))+geom_point()
+
+ggplot(full, aes(x=chla, y=chlor_8day, color=chla_data_source))+geom_point()
+ggplot(full, aes(x=chla, y=fluo.1m, color=chla_data_source))+geom_point()
+ggplot(full, aes(x=chlor_8day, y=fluo.1m, color=chla_data_source))+geom_point()
+
 #product2####
 product2<-full%>%
   mutate(larval_identity=ID_morph_and_PCR, .keep="unused")%>%
