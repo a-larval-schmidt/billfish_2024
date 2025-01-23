@@ -8,7 +8,7 @@
 #libraries####
 library(tidyverse)
 library(lubridate)
-library(readxl)
+#library(readxl)
 library(suncalc)
 library(measurements)
 library(stringr)
@@ -90,8 +90,9 @@ str(slick_whole_short)
 str(whip)
 length(unique(whip$Sample))
 #whip<- ifelse(grepl("Bad",whip$FLAG),))
-whip_ik<- whip %>%
-  filter(str_detect(Tow.type, "6' IK|paravane"))
+#WAS THE FOLLOWING:
+whip_ik<- whip %>%filter(str_detect(Tow.type, "6' IK|paravane"))
+#ALS UPDATED TO BELOW TO BE MORE INCLUSIVE FOR LARVAL LAT LONGSwhip_ik<- whip %>%filter(str_detect(Tow.type, "6'|IK|paravane|1.8 IK|1.5 ring|IKMT|neuston"))
 length(unique(whip_ik$Sample))
 #make whip names consistent with slick names
 whip_ik <-whip_ik %>%
@@ -192,6 +193,7 @@ str(combo_whip_slick_short)
 #DONEfix tow volume for bad coordinate stations, done, written in document
 #DONEfor cruises where lat long is NA use mid lat long! DONE, lines 99,100
 #write.csv(combo_whip_slick_short,"C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv",row.names = F)
+write.csv(combo_whip_slick_short,"C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_shortJan25.csv",row.names = F)
 
 #check for 1704 tsg data#####
 combo<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/combo_whip_slick_short11.csv")
