@@ -11,65 +11,9 @@ library(sp)
 library(dplyr)
 library(stringr)
 library(fuzzyjoin)
-#old strategy########
-df<-read.csv("~/billfish_not_github/Product 3_ Envrionmental Data Paired with Billfish Specimen Data.csv")
-df2<-df%>%
-  distinct(specimen_identification,.keep_all=T)%>%
-  mutate(length_occurence=
-           ifelse(is.na(length_occurence),0,length_occurence))%>%
-  unite("specimen_identification_len",c(specimen_identification, standard_length_mm), sep="_", remove=F)%>%
-  uncount(length_occurence, .remove=F)%>%
-  rename("vial_id"=specimen_identification)%>%
-  mutate("length_occurence"=1)
-
-
-df3<-df2%>% uncount(length_occurence,.id="id_modifier", .remove=F)%>%
-unite("specimen_identification_new",c(specimen_identification_len,id_modifier), sep="_", remove = T)%>%
-  mutate("real_count"=1)%>%
-  mutate("is_or_is"=ifelse(count==real_count,T,F))
-
-df4<-df3%>%distinct(specimen_identification_new, .keep_all = T)
-
-df1<-anti_join(df,df4,by = join_by("specimen_identification"=="vial_id")) #uncount this using the count column and then rbind this to df3
-df1<-df1%>%uncount(count, .id="id_modifier", .remove=F)%>%
-  rename("vial_id"=specimen_identification)%>%
-  unite("specimen_identification_new", c(vial_id,id_modifier), sep="_", remove = F)%>%
-  mutate("real_count"=1)%>%
-  dplyr::select(!(id_modifier))%>%
-  mutate("is_or_is"=ifelse(count==real_count,T,F))
-
-setdiff(colnames(df1),colnames(df4))
-df5<-rbind(df1, df4)
-
-summary(df1$is_or_is)
-#write.csv(df5, "~/billfish_not_github/df5_01142025.csv")
-
-#strategy which does not give unique IDs across different length values#######
-df<-read.csv("~/billfish_not_github/Product 3_ Envrionmental Data Paired with Billfish Specimen Data.csv")
-#make a different df without lengths and uncount by count
-dfn<-df%>%filter(is.na(standard_length_mm))%>%
-  uncount(count, .id="id_mod",.remove=F)%>%
-  unite(new_id, c(specimen_identification, id_mod), remove=F)
-
-
-#make a df of larvae with lengths and then uncount by length occurence
-dfl<-df%>%filter(!is.na(standard_length_mm))%>%
-  unite("specimen_identification",c(specimen_identification, standard_length_mm), sep="_", remove=F)%>%
-  uncount(length_occurence, .id="id_mod", .remove=F)%>%
-  unite(new_id, c(specimen_identification, id_mod), remove=F)
-
-
-setdiff(colnames(dfl),colnames(dfn))
-
-#rbind these together
-dfr<-rbind(dfl,dfn)
-
-
-df_anti<-anti_join(dfr,df5,by=join_by("new_id"=="specimen_identification_new"))
-
-
 #strategy where we start completely from scratch#####
-mas<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/bf_main_2025.csv")
+mas<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/bf_main_01222025.csv")
+#mas<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/bf_main_2025.csv")
 #mas<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/bf_main_20241122.csv")
 #mas<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/bf_main_20241217.csv")
 og<-filter(mas, data.source!="box")
@@ -374,4 +318,130 @@ tsg.sum%>%kbl()%>%kable_styling()
 
 #env+ larv#####
 specimen_join<-left_join(df5,full,join_by("Site"=="Site")) #want larv into sites since the focus is on sites and then just if a bf was found there
-hand<-dplyr::select(specimen_join,c(Site, Year.x, Cruise, station, data.source, vial_id, specimen_identification_new, stage, count,real_count, is_or_is, length_occurence, comb_length, paper_length_num, temp.is, sal.is,temp_fix, sal_fix, chla))
+summarize(specimen_join,sum(real_count, na.rm=T), sum(count, na.rm=T),sum(length_occurence,na.rm = T))
+nrow(specimen_join)
+summarize(df5, sum(count, na.rm=T),sum(length_occurence,na.rm = T))
+nrow(distinct(full, Site))
+specimen_join<-left_join(df5,full,join_by("Site"=="Site")) #want larv into sites since the focus is on sites and then just if a bf was found there
+#write.csv(specimen_join, "~/billfish_not_github/bf_prod3_triplecheck.csv")
+#STILL UNDER CONSTRUCTION: 01/22/25: presence-absence data set#####
+combo<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_shortJan25.csv")
+comboo<-combo%>%
+  unite("dend",c(Date,Time.end),sep=" ",remove = F)%>%
+  unite("send",c(Date,Time.start),sep=" ", remove=F)%>%
+  mutate(Date=mdy(Date))%>%
+  mutate(Time.end=hms(Time.end))%>%
+  mutate(Time.start=hms(Time.start))
+combooo<-comboo%>% #times in local
+  mutate(EndDateTime=lubridate::mdy_hms(dend, tz="HST"), .keep="unused")%>%
+  mutate(StartDateTime=lubridate::mdy_hms(send,tz="HST"), .keep="unused")%>%
+  mutate("DateTime"=ymd_hms(DateTime))
+comboooo<-combooo%>%dplyr::select(c(Site,Cruise,DateTime,Time.start, Time.end,LAT_DD_start, LONG_DD_start, LAT_DD_end, LONG_DD_end))
+micro2<-anti_join(comboooo,full,by=join_by(Site))
+micro<-left_join(specimen_join,micro2,join_by("Site"=="Site"))#,relationship = "many-to-many")
+pa<-micro%>%mutate("billfish_present"=ifelse(is.na(count)==F,T,F))%>%
+  mutate("ta_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Tetrapturus angustirostris",T,F))%>%
+  mutate("mn_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Makaira nigricans",T,F))%>%
+  mutate("xg_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Xiphias gladius",T,F))%>%
+  mutate("ka_present"=ifelse(is.na(count)==F & ID_morph_and_PCR=="Kajikia audax",T,F))
+
+#wayyyy fewer sites than expected; needs to keep sites without larvae as well
+pap<-pa%>%dplyr::select(c(billfish_present, ta_present, mn_present,xg_present, ka_present,Site,Cruise,DateTime,Time.start, Time.end,
+                          LAT_DD_start, LONG_DD_start, LAT_DD_end, LONG_DD_end))%>%
+                          distinct(Site,.keep_all = TRUE) #write.csv(pap, "C:/github/billfish_2024/Sites_Env_bf_PA_1220.csv")
+
+
+#selections for doublechecking######
+hand<-dplyr::select(specimen_join,c(Site, Year.y,Year.x, Cruise, station, data.source, vial_id, specimen_identification_new, stage, count,real_count, is_or_is, length_occurence, comb_length, paper_length_num, temp.is, sal.is,temp_fix, sal_fix, chla,ID_morph_and_PCR,))
+
+thirdcheck<-specimen_join%>%filter(Year.x<2020)%>%
+  rename("Year"=Year.x, "Cruise."=cruise, "Station."=station,"specimen_identification"=specimen_identification_new,
+                              "count."=real_count, "standard_length_mm"=comb_length,"temp_is"=temp.is,"sal_is"=sal.is,
+                               "chla_is"=chla, "species."=ID_morph_and_PCR)%>%
+  dplyr::select(c(specimen_identification,
+                  species.,
+                  count,
+                  standard_length_mm,
+                  length_occurence,
+                  stage,
+                  Transect,
+                  Station.,
+                  Site,
+                  Cruise.,
+                  Year,
+                  DateTime,
+                  Date,
+                  Time.start,
+                  Time.end,
+                  LAT_DD_start,
+                  LONG_DD_start,
+                  Habitat,
+                  Platform,
+                  Gear,
+                  mesh,
+                  vol.m3,
+                  tow.length,
+                  dist.shore,
+                  tow.duration,
+                  tow.depth.category,
+                  day.night,
+                  tow.speed.kts,
+                  LAT_DD_end,
+                  LONG_DD_end, temp_is, sal_is, chla_is))
+
+#do not run: old strategy########
+df<-read.csv("~/billfish_not_github/Product 3_ Envrionmental Data Paired with Billfish Specimen Data.csv")
+df2<-df%>%
+  distinct(specimen_identification,.keep_all=T)%>%
+  mutate(length_occurence=
+           ifelse(is.na(length_occurence),0,length_occurence))%>%
+  unite("specimen_identification_len",c(specimen_identification, standard_length_mm), sep="_", remove=F)%>%
+  uncount(length_occurence, .remove=F)%>%
+  rename("vial_id"=specimen_identification)%>%
+  mutate("length_occurence"=1)
+
+
+df3<-df2%>% uncount(length_occurence,.id="id_modifier", .remove=F)%>%
+  unite("specimen_identification_new",c(specimen_identification_len,id_modifier), sep="_", remove = T)%>%
+  mutate("real_count"=1)%>%
+  mutate("is_or_is"=ifelse(count==real_count,T,F))
+
+df4<-df3%>%distinct(specimen_identification_new, .keep_all = T)
+
+df1<-anti_join(df,df4,by = join_by("specimen_identification"=="vial_id")) #uncount this using the count column and then rbind this to df3
+df1<-df1%>%uncount(count, .id="id_modifier", .remove=F)%>%
+  rename("vial_id"=specimen_identification)%>%
+  unite("specimen_identification_new", c(vial_id,id_modifier), sep="_", remove = F)%>%
+  mutate("real_count"=1)%>%
+  dplyr::select(!(id_modifier))%>%
+  mutate("is_or_is"=ifelse(count==real_count,T,F))
+
+setdiff(colnames(df1),colnames(df4))
+df5<-rbind(df1, df4)
+
+summary(df1$is_or_is)
+#write.csv(df5, "~/billfish_not_github/df5_01142025.csv")
+
+#do not run: strategy which does not give unique IDs across different length values#######
+df<-read.csv("~/billfish_not_github/Product 3_ Envrionmental Data Paired with Billfish Specimen Data.csv")
+#make a different df without lengths and uncount by count
+dfn<-df%>%filter(is.na(standard_length_mm))%>%
+  uncount(count, .id="id_mod",.remove=F)%>%
+  unite(new_id, c(specimen_identification, id_mod), remove=F)
+
+
+#make a df of larvae with lengths and then uncount by length occurence
+dfl<-df%>%filter(!is.na(standard_length_mm))%>%
+  unite("specimen_identification",c(specimen_identification, standard_length_mm), sep="_", remove=F)%>%
+  uncount(length_occurence, .id="id_mod", .remove=F)%>%
+  unite(new_id, c(specimen_identification, id_mod), remove=F)
+
+
+setdiff(colnames(dfl),colnames(dfn))
+
+#rbind these together
+dfr<-rbind(dfl,dfn)
+
+
+df_anti<-anti_join(dfr,df5,by=join_by("new_id"=="specimen_identification_new"))
+
