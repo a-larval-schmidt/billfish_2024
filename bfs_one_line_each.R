@@ -11,6 +11,7 @@ library(sp)
 library(dplyr)
 library(stringr)
 library(fuzzyjoin)
+
 #strategy where we start completely from scratch#####
 mas<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/bf_main_01222025.csv")
 #mas<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/bf_main_2025.csv")
@@ -97,7 +98,51 @@ df1<-df1%>%uncount(count, .id="id_modifier", .remove=F)%>%
 
 setdiff(colnames(df1),colnames(df4))
 df5<-rbind(df1, df4)
+#add dropped larvae######
+larv<-df5%>%dplyr::select(c(Site, vial_id,specimen_identification_new,specimen_identification_edited_Nov,vial,ID_morph_and_PCR,taxa,family,stage, stage_QC_flag,comb_length,length_occurence,real_count,count,count.sum))
+og<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/downloaded_Feb2024_MASTER_BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20240202.csv")
+discrep_site<-anti_join(og, larv, by=join_by("sample"==Site))
+disc<-discrep_site%>%filter(!is.na(Year))%>%
+  dplyr::select(c(vial,X1mm:X100.mm))%>%
+  pivot_longer(X1mm:X100.mm,names_to="paper_length",
+               values_to="length_occurence",values_drop_na = T)
+og<-og%>%dplyr::select(!c(X1mm:X100.mm))
+disc2<-disc%>%
+  filter(length_occurence>0)%>%
+  mutate("paper_length_num"=gsub("mm","",paper_length), .keep="unused")%>%
+  mutate("paper_length_num"=gsub("X","",paper_length_num))%>%
+  mutate("paper_length_num"=gsub("m","",paper_length_num))%>%
+  mutate("paper_length_num"=as.numeric(paper_length_num))
+disc3<-left_join(discrep_site,disc2, by=join_by(vial))
+disc3<-disc3%>%
+  distinct(vial,.keep_all = T)%>%
+  dplyr::select(!c(X1mm:X100.mm))%>%
+  filter(!is.na(Year))%>%
+  rename(c("comb_length"=paper_length_num,"specimen_identification"=vial))%>%
+  uncount(count,.id="id_modifier", .remove=F)%>%
+  unite("specimen_identification_new", c(specimen_identification,id_modifier), sep="_", remove = F)%>%
+  mutate("real_count"=1)%>%
+  mutate("tofix"=ifelse(length_occurence==unknown.sizes,T,F))
 
+disc3<-disc3%>%mutate(unknown.sizes=ifelse((tofix==T & specimen_identification_new=="TC0203002BF01-02_1"),
+                                           (gsub(1,0,unknown.sizes)),unknown.sizes))%>%
+  mutate(length_occurence=ifelse((tofix==T & specimen_identification_new=="TC0203002BF01-02_2"),
+                                 (gsub(1,0,length_occurence)),length_occurence))%>%
+  mutate(comb_length=ifelse((tofix==T & specimen_identification_new=="TC0203002BF01-02_2" & length_occurence==0),NA,comb_length))%>%
+  dplyr::select(!c(tofix,X,X.1,id_modifier,count))%>%
+  rename(c("count"=real_count, "vial_id"=specimen_identification))%>%
+  mutate("ID_morph_and_PCR"=taxa)
+
+diff_list<-setdiff(colnames(df5),colnames(disc3)) #in whip not in slick
+not_disc<-matrix(data=NA,ncol=length(diff_list),nrow=nrow(disc3),)
+diff_list<-as.list(diff_list)
+not_disc<-as.data.frame(not_disc)
+names(not_disc)=diff_list
+disc4<-disc3%>%add_column(not_disc)
+setdiff(colnames(disc4),colnames(df5))
+disc4<-disc4%>%dplyr::select(!sample)%>%
+  mutate(real_count=1)
+df5<-rbind(df5,disc4)
 #add env data to df5####
 #combo<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_short12.csv")
 combo<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_longJan272025.csv")
@@ -354,7 +399,7 @@ specimen_join<-left_join(df6,full,join_by("Site"=="Site")) #want larv into sites
 specimen_join<-left_join(df5,full,join_by("Site"=="Site")) #want larv into sites since the focus is on sites and then just if a bf was found there
 
 #COUNT CHECKS#####
-summarize(specimen_join,sum(real_count, na.rm=T), sum(count, na.rm=T),sum(length_occurence,na.rm = T))
+summarize(specimen_join,sum(as.numeric(real_count, na.rm=T)), sum(count, na.rm=T),sum(length_occurence,na.rm = T))
 summarize(df6,sum(real_count, na.rm=T), sum(count, na.rm=T),sum(length_occurence,na.rm = T))
 summarize(df5,sum(real_count, na.rm=T), sum(count, na.rm=T),sum(length_occurence,na.rm = T))
 
@@ -526,7 +571,7 @@ library(data.table)
 #mini8<-df_8day[,c("Date","LONG_DD_start", "LAT_DD_start")]
 #duh = left_join(mini8, df1,by=c("Date"))#, all.y=T)
 
-#duh = left_join(df1, df_8day[,-"DT_DATE"], by = c("Date","LONG_DD_start", "LAT_DD_start"))#,relationship = "many-to-many")
+duh = left_join(df1, df_8day[,-"DT_DATE"], by = c("Date","LONG_DD_start", "LAT_DD_start"),relationship = "many-to-many")
 full_df = left_join(df, df_8day[,-"DT_DATE"], by = c("Date","LONG_DD_start", "LAT_DD_start"))
 
 #dull=left_join(df1, df_8day[,-"DT_DATE"],by =c('LONG_DD_start', 'LAT_DD_start'),relationship = "many-to-many")
@@ -544,34 +589,36 @@ bet<-bet%>%dplyr::select(c(Site, cruise,Date_YYYYMMDD,Lat_In,Lon_In,Net_type,Tim
   rename(c("Cruise"=cruise, "Date"=Date_YYYYMMDD,"LAT_DD_start"=Lat_In,"LONG_DD_start"=Lon_In,
            "Gear"=Net_type,"Time"=Time_In_HST,"Time.end"=Time_Out_HST, "tow.depth.category"=Max_Depth_m))
 diff_list<-setdiff(colnames(all_env_data),colnames(bet)) #in whip not in slick
-not_bet<-matrix(data=NA,ncol=46,nrow=9,)
+not_bet<-matrix(data=NA,ncol=length(diff_list),nrow=nrow(bet),)
 diff_list<-as.list(diff_list)
 not_bet<-as.data.frame(not_bet)
 names(not_bet)=diff_list
 bet<-bet%>%add_column(not_bet)
-all_env_data<-rbind(all_env_data,bet)
+all_env_data<-rbind(bet,all_env_data)
 #larv+ remote sensing#####
 str(df5)
 larv<-df5%>%dplyr::select(c(Site, vial_id,specimen_identification_new,
                             ID_morph_and_PCR,taxa,family,stage, stage_QC_flag,comb_length,
-                            length_occurence,real_count,count,count.sum))
-env_larv_data<-full_join(larv, all_env_data,join_by("Site"=="Site"))#,relationship = "many-to-many") #want sites into larv since the focus is on larv
+                            length_occurence,real_count,count,count.sum))%>%
+  distinct(specimen_identification_new, .keep_all=T)
+env_larv_data<-full_join(all_env_data,larv,join_by("Site"=="Site"),relationship = "many-to-many") #want sites into larv since the focus is on larv
 env_larv<-env_larv_data%>%
   mutate("specimen_identification_final"=ifelse(is.na(specimen_identification_new)==T,
                                                 "No billfish were recorded at this site",
                                                 specimen_identification_new))
 #selections for doublechecking######
 thirdcheck<-env_larv%>%
-  filter(Year<=2022)%>%
+  #filter(Year<=2022)%>%
   #filter(consistent_with_product_1==T)%>%
   distinct(specimen_identification_final,.keep_all=T)%>%
   rename("specimen_identification"=specimen_identification_final,
                               "standard_length_mm"=comb_length,"temp_is"=temp.is,"sal_is"=sal.is,
                                "chla_is"=chla, "species"=ID_morph_and_PCR)%>%
   mutate("density"=count/vol.m3)%>%
+  mutate("count"=ifelse((specimen_identification!='No billfish were recorded at this site' & is.na(real_count)==T),1,real_count))%>%
   dplyr::select(c(specimen_identification,
                   species,
-                  real_count,
+                  count,
                   standard_length_mm,
                   length_occurence,
                   stage,
@@ -618,8 +665,18 @@ thirdcheck<-env_larv%>%
                   cat_moon,
                   `consistent_with_product_1`))
 
-#write.csv(thirdcheck,("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/product3_2025_Jan28.csv"))
+#write.csv(thirdcheck,("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/product3_2025_Jan28_product3_2025_Jan28_withBET_andfoundlarvs.csv"))
 #QC######
+og<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/downloaded_Feb2024_MASTER_BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20240202.csv")
+larv<-df5%>%dplyr::select(c(Site, vial_id,specimen_identification_new,specimen_identification_edited_Nov,vial,ID_morph_and_PCR,taxa,family,stage, stage_QC_flag,comb_length,length_occurence,real_count,count,count.sum))
+discrep_larv<-anti_join(og, larv, by=join_by("vial"==vial))
+discrep_site<-anti_join(og, larv, by=join_by("sample"==Site))
+nrow(discrep_larv) #so 82 larvae/vials are different from og than larv
+nrow(discrep_site)
+disc<-discrep_site%>%filter(!is.na(Year))
+sum(disc$count)
+sum(disc$count.sum, na.rm=T)
+
 check<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/product3_2025_Jan28.csv")
 submitted<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/Product 3_ Envrionmental Data Paired with Billfish Specimen Data.csv")
 discrep_larv<-anti_join(check, submitted, by=join_by("specimen_identification"==specimen_identification))
