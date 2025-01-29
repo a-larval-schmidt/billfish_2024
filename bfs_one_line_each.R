@@ -105,9 +105,10 @@ combo<-combo%>%distinct(Site, .keep_all=T)
 comboo<-combo%>%
   unite("dend",c(Date,Time.end),sep=" ",remove = F)%>%
   unite("send",c(Date,Time.start),sep=" ", remove=F)%>%
-  mutate(Date=mdy(Date))%>%
-  mutate(Time.end=hms(Time.end))%>%
-  mutate(Time.start=hms(Time.start))
+  mutate(Date=ymd(Date))%>%
+  mutate(Time.end=str_sub(Time.end, end=8))%>%
+  mutate(Time.start=str_sub(Time.start,end=8))
+str(comboo)
 combooo<-comboo%>% #times in local
   mutate(EndDateTime=lubridate::ymd_hms(dend, tz="HST"), .keep="unused")%>%
   mutate(StartDateTime=lubridate::ymd_hms(send,tz="HST"), .keep="unused")
@@ -156,14 +157,21 @@ tsg1<-filter(tsg1, TempC<40)
 tsg1<-filter(tsg1,0<TempC)
 
 #tsg2####
+#tsg2<-tsg1%>% mutate(datetime=ymd_hms(datetime),.keep="all")%>%mutate(Date=lubridate::ymd(Day))%>%mutate(local_datetime=with_tz(datetime, "HST"))%>%##view time as HST to match combo datamutate(time2=str_replace_all(time,"[:alpha:]",":"))%>%mutate(time3=str_sub(time2, end=-2))%>%mutate(time=hms(time3))
 tsg2<-tsg1%>% 
   mutate(datetime=ymd_hms(datetime),.keep="all")%>%
+  mutate(time5=ifelse(grepl("H",time),time,paste("00:",time)))%>%
+  separate_wider_delim(time5,"H", names = c("hours","minutesseconds"),too_few = "align_end")%>% #  mutate(time6=str_pad(as.character(time), 9, pad = "0","left"))%>%
   mutate(Date=lubridate::ymd(Day))%>%
   mutate(local_datetime=with_tz(datetime, "HST"))%>%##view time as HST to match combo data
-  mutate(time2=str_replace_all(time,"[:alpha:]",":"))%>%
-  mutate(time3=str_sub(time2, end=-2))%>%
-  mutate(time=hms(time3))
-   
+  mutate(minutesseconds=str_sub(minutesseconds, end=-5))%>%
+  mutate("minsec"=str_replace_all(minutesseconds,"[:alpha:]",""))%>%
+  mutate("hourz"=str_pad(as.character(hours), 2, pad = "0","left"))%>%
+  mutate(hourz=ifelse(is.na(hourz)==T, "00", hourz))%>%
+  mutate(minz=str_replace_all(minsec,"00: ",""))%>%
+  mutate(minz=str_replace_all(minz," ",""))%>%
+  mutate(minz=str_pad(as.character(minz), 2, pad = "0","left"))%>%
+  unite("time",c(hourz, minz), sep=":")  
 tsg2<-tsg2%>%dplyr::select(c(Year, TempC, Salinity, datetime,time, local_datetime,Day_Time_Julian))
 str(tsg2) #times in UTC; this includes 1999 to 2006
 #QC##
@@ -179,7 +187,7 @@ e<-o9804%>%
   mutate(Day_Time_Julian=decimal_date(datetime))%>%
   mutate(date=date(datetime))%>%
   mutate(Year=year(datetime))%>%
-  mutate(time=hm(TIME_HST))%>%
+  mutate(time=TIME_HST)%>%
   mutate(TempC=as.numeric(TSG.TEMP))%>%
   mutate(Salinity=as.numeric(TSG.SALINITY))%>%
   mutate(X=NA)
@@ -208,7 +216,7 @@ sbe45<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/se1704_AllInclusive
 str(sbe45)
 sbe46<-sbe45%>%
   mutate(date=mdy(Date))%>%
-  mutate(time=hms(Time))%>%
+  mutate(time=as.character(Time))%>%
   mutate(Year=year(date))%>%
   mutate(TempC=as.numeric(SBE.45.Remote.Temperature))%>%
   mutate(Salinity=as.numeric(SBE.45.Salinity))%>%
@@ -253,7 +261,8 @@ rawva1<-rawva%>%
           minute = minute(datetime),
           second = second(datetime)) %>% 
   mutate(time2 = paste(hour, minute, second, sep = ":"), .keep="unused")%>%
-  mutate(time=lubridate::hms(time2))%>%
+  mutate(time=as.character(time2))%>%#lubridate::hms(time2))%>%
+  mutate(time=str_sub(time, end=7))%>%
   mutate(Day_Time_Julian=decimal_date(datetime))
 str(rawva1)#its okay that almost half of it is NAs, sal and temp measurements were not taken at exactly the same time so full_join was effectively more of an r bind
 rawva2<-dplyr::select(rawva1, c(colnames(tsg5)))
@@ -326,7 +335,7 @@ tsg.sum%>%kbl()%>%kable_styling()
 #env+ larv#####
 #to do, make list of non 6ft IK tows to remove from larval list
 whip<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/WHIP_TowMetadata_20240419 - WHIP_TowMetadata.csv") 
-#whip_antik<- whip %>%filter(!str_detect(Tow.type, "6' IK|paravane")) %>%mutate("Site"=Sample)#this is just the ! version of the filter step in metadata matching
+whip_antik<- whip %>%filter(!str_detect(Tow.type, "6' IK|paravane")) %>%mutate("Site"=Sample)#this is just the ! version of the filter step in metadata matching
 anti_site_list<-whip_antik$Site
 slick<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/TowData_2016-2018_20211203 - TowData_2016-2018_20211203.csv")
 #slick<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/422_edit_TransectMetadata_Whitneyetal2020_SuppTableS6 - Copy.csv") #couldnʻt figure out duration in R so did it in excel
@@ -342,6 +351,8 @@ anti<-anti_new$Site
 listy<-as.list(c(anti_neuston,anti_site_list,anti))
 df6<-df5%>%filter(!Site %in% listy)
 specimen_join<-left_join(df6,full,join_by("Site"=="Site")) #want larv into sites since the focus is on sites and then just if a bf was found there
+specimen_join<-left_join(df5,full,join_by("Site"=="Site")) #want larv into sites since the focus is on sites and then just if a bf was found there
+
 #COUNT CHECKS#####
 summarize(specimen_join,sum(real_count, na.rm=T), sum(count, na.rm=T),sum(length_occurence,na.rm = T))
 summarize(df6,sum(real_count, na.rm=T), sum(count, na.rm=T),sum(length_occurence,na.rm = T))
@@ -384,7 +395,16 @@ sp_joi<-specimen_join%>%
                 LONG_DD_end))#, temp_is, sal_is, chla_is))
 f<-is.na(sp_joi$Date)==T
 #write.csv(specimen_join, "~/billfish_not_github/bf_prod3_triplecheck.csv")
+
 #remote sensing#####
+library(raster)
+library(tidyverse)
+library(sp)
+library(sf)
+library(reshape2)
+library(rerddap)
+library(rerddapXtracto)
+library(httr)
 ##SST#####
 WHIP_Tows<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_longJan272025.csv")
 WHIP_Tows$Year<-year(WHIP_Tows$Date)
@@ -417,115 +437,148 @@ dd<-d%>%  mutate("TempC_data_source"=ifelse(is.na(temp.1m)==F,"CTD/TSG","NOAA_CR
   mutate("CRW_SST"=ifelse(is.na(temp.1m)==T,SST_Sat,temp.is), .keep="all")
 
 #add chla from Jessie!!!!!####
-# library(raster)
-# library(tidyverse)
-# library(sp)
-# library(sf)
-# library(reshape2)
-# setwd("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/")
-# # read in dataset
-# df$Date = format(dd$Date, format = "%m/%d/%Y")
-# 
+library(raster)
+library(tidyverse)
+library(sp)
+library(sf)
+ library(reshape2)
+setwd("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/")
+ # read in dataset
+df<-dd
+df$Date = format(dd$Date, format = "%m/%d/%Y")
+df$Date = as.Date(df$Date, format = "%m/%d/%Y")
+
 # # read in 8-day 4km ocean color data (.nc file)
-# data = "ESA_OC_CCI_chla_kd490_1997_2021_8day.nc"
-# #data = "ESA_OC_CCI_chla_kd490_1997_2019_monthly.nc"
-# 
-# chlor <-stack(data, varname = "chlor_a")
-# kd490 <-stack(data, varname = "kd_490")
-# 
+ data = "C:/Users/Andrea.Schmidt/Documents/billfish_not_github/ESA_OC_CCI_chla_kd490_1997_2021_8day.nc"
+ #data = "ESA_OC_CCI_chla_kd490_1997_2019_monthly.nc"
+#
+chlor <-stack(data, varname = "chlor_a")
+kd490 <-stack(data, varname = "kd_490")
+#
 # # use buffered bathymetry file to mask shallow waters around MHI
-# load("bathy_HI_30m_buffered_poly_1km.RData")
-# chlor_masked <- raster::mask(chlor, bathy_buffered_poly_1km, inverse = TRUE)
-# kd490_masked <- raster::mask(kd490, bathy_buffered_poly_1km, inverse = TRUE)
-# 
+load("bathy_HI_30m_buffered_poly_1km.RData")
+chlor_masked <- raster::mask(chlor, bathy_buffered_poly_1km, inverse = TRUE)
+kd490_masked <- raster::mask(kd490, bathy_buffered_poly_1km, inverse = TRUE)
+#
 # # create new column of nearest 8-day value
-# library(data.table)
-# df<-dd
-# df1 = df
-# y=as.numeric(substr(names(chlor),2,5))
-# m=as.numeric(substr(names(chlor),7,8))
-# d=as.numeric(substr(names(chlor),10,11))
-# df2 = as.data.frame(ymd(paste(y,m,d)))
-# names(df2) <- "date"
-# 
-# df1<-df1%>%dplyr::select(!moon_date)%>%
-#   mutate("Date"=ymd(Date))
-# setDT(df1)[,DT_DATE := Date] # name of date column in your dataset
-# setDT(df2)[,DT_DATE := date] # name of date column in df2
-# 
+library(data.table)
+ 
+ df1 = df
+ y=as.numeric(substr(names(chlor),2,5))
+ m=as.numeric(substr(names(chlor),7,8))
+ d=as.numeric(substr(names(chlor),10,11))
+ df2 = as.data.frame(ymd(paste(y,m,d)))
+ names(df2) <- "date"
+#
+ df1<-df1%>%dplyr::select(!moon_date)%>%
+   mutate("Date"=ymd(Date))
+ setDT(df1)[,DT_DATE := Date] # name of date column in your dataset
+ setDT(df2)[,DT_DATE := date] # name of date column in df2
+#
 # # merge d1 and df2 by matching the nearest date from df2 (ocean color 8-day dates) to the date in df1 (your data)
-# merged <- df2[df1,on=.(date=DT_DATE),roll="nearest"]
-# df_8day = merged[,c("Date","DT_DATE","LAT_DD_start","LONG_DD_start")]
-# 
+ merged <- df2[df1,on=.(date=DT_DATE),roll="nearest"]
+ df_8day = merged[,c("Date","DT_DATE","LAT_DD_start","LONG_DD_start")]
+#
 # # note 1997 data only goes back to 09/1997 but the cruise for that year is 04/1997, so wonʻt have chlor data for that cruise
-# df_8day<-filter(df_8day, DT_DATE > "1997-12-31")
-# 
+ df_8day<-filter(df_8day, DT_DATE > "1997-12-31")
+#
 # # create empty columns for chlorophyll and kd490
-# df_8day$chlor_8day <- NA
-# df_8day$kd490_8day <- NA
-# 
-# df_8day<-df_8day%>%
-#   filter(is.na(LAT_DD_start)!=T)%>%
-#   filter(is.na(LONG_DD_start)!=T)
-# 
-# for(i in 1:nlayers(chlor)) {
-#   
-#   # i = 30
-#   
-#   year=as.numeric(substr(names(chlor_masked[[i]]),2,5))
-#   month=as.numeric(substr(names(chlor_masked[[i]]),7,8))
-#   day=as.numeric(substr(names(chlor_masked[[i]]),10,11))
-#   ymd = ymd(paste(year,month,day))
-#   
-#   idx <- which(df_8day$DT_DATE == ymd)
-#   
-#   # need to average layer to get rid of z-value that is causing issues in extract
-#   ch = mean(chlor_masked[[i]])
-#   k = mean(kd490_masked[[i]])
-#   
-#   if (length(idx)>0){
-#     
-#     pts <- SpatialPoints(df_8day[idx,c('LONG_DD_start', 'LAT_DD_start')], crs(ch))
-#     
-#     df_8day$chlor_8day[idx] <- raster::extract(ch, pts) 
-#     df_8day$kd490_8day[idx] <- raster::extract(k, pts) 
-#     
-#   }
-#   else if (length(idx)==0) {}
-#   
-#   print(paste("Completed",i,"of",nlayers(chlor_masked),"layers"))
-#   
-# }
-df_8day<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/df_8day.csv")
+ df_8day$chlor_8day <- NA
+ df_8day$kd490_8day <- NA
+#
+ df_8day<-df_8day%>%
+   filter(is.na(LAT_DD_start)!=T)%>%
+   filter(is.na(LONG_DD_start)!=T)
+#
+ for(i in 1:nlayers(chlor)) {
+
+    #i = 30
+
+   year=as.numeric(substr(names(chlor_masked[[i]]),2,5))
+   month=as.numeric(substr(names(chlor_masked[[i]]),7,8))
+   day=as.numeric(substr(names(chlor_masked[[i]]),10,11))
+   ymd = ymd(paste(year,month,day))
+
+   idx <- which(df_8day$DT_DATE == ymd)
+
+   # need to average layer to get rid of z-value that is causing issues in extract
+   ch = mean(chlor_masked[[i]])
+   k = mean(kd490_masked[[i]])
+#
+   if (length(idx)>0){
+
+     pts <- SpatialPoints(df_8day[idx,c('LONG_DD_start', 'LAT_DD_start')], crs(ch))
+
+     df_8day$chlor_8day[idx] <- raster::extract(ch, pts)
+     df_8day$kd490_8day[idx] <- raster::extract(k, pts)
+
+   }
+   else if (length(idx)==0) {}
+
+   print(paste("Completed",i,"of",nlayers(chlor_masked),"layers"))
+
+ }
+#write.csv(df_8day,"C:/Users/Andrea.Schmidt/Documents/billfish_not_github/df_8day_jan28.csv")
 
 # merge matched ocean color back with full dataframe
-df1<-dd #GOT STUCK HERE
-df_8day<-df_8day%>%
-  mutate(DT_Date=ymd(DT_DATE))
-duh = left_join(df1, df_8day[,-"DT_DATE"], by = c("Date"))#,"LONG_DD_start", "LAT_DD_start"))
-dull=left_join(df1, df_8day[,-"DT_DATE"],by =c('LONG_DD_start', 'LAT_DD_start'),relationship = "many-to-many")
-duh2<-dull%>%
+#df1<-dd #GOT STUCK HERE
+#df_8day<-df_8day%>%mutate(DT_Date=ymd(DT_DATE))
+#mini8<-df_8day[,c("Date","LONG_DD_start", "LAT_DD_start")]
+#duh = left_join(mini8, df1,by=c("Date"))#, all.y=T)
+
+#duh = left_join(df1, df_8day[,-"DT_DATE"], by = c("Date","LONG_DD_start", "LAT_DD_start"))#,relationship = "many-to-many")
+full_df = left_join(df, df_8day[,-"DT_DATE"], by = c("Date","LONG_DD_start", "LAT_DD_start"))
+
+#dull=left_join(df1, df_8day[,-"DT_DATE"],by =c('LONG_DD_start', 'LAT_DD_start'),relationship = "many-to-many")
+duh2<-full_df%>%
   mutate("chla_data_source"=ifelse(is.na(chla)==F,"bottle collections","ESA_OC-CCI")) %>%
   mutate("chla"=ifelse(is.na(chla)==T,chlor_8day,chla))#%>%
 duh3<-as.data.frame(duh2)
-
+combo<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_short12.csv")
+ik_list<-combo$Site
+all_env_data<-duh3%>% mutate("consistent_with_product_1"=ifelse(Site %in% ik_list,TRUE, FALSE))%>%
+  distinct(Site,.keep_all=T)
+#if you want dates/lats/longs for bet larvae#########
+bet<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/PIFSC_billfish_larvae_2022.csv")
+bet<-bet%>%dplyr::select(c(Site, cruise,Date_YYYYMMDD,Lat_In,Lon_In,Net_type,Time_In_HST,Time_Out_HST,Max_Depth_m))%>%
+  rename(c("Cruise"=cruise, "Date"=Date_YYYYMMDD,"LAT_DD_start"=Lat_In,"LONG_DD_start"=Lon_In,
+           "Gear"=Net_type,"Time"=Time_In_HST,"Time.end"=Time_Out_HST, "tow.depth.category"=Max_Depth_m))
+diff_list<-setdiff(colnames(all_env_data),colnames(bet)) #in whip not in slick
+not_bet<-matrix(data=NA,ncol=46,nrow=9,)
+diff_list<-as.list(diff_list)
+not_bet<-as.data.frame(not_bet)
+names(not_bet)=diff_list
+bet<-bet%>%add_column(not_bet)
+all_env_data<-rbind(all_env_data,bet)
+#larv+ remote sensing#####
+str(df5)
+larv<-df5%>%dplyr::select(c(Site, vial_id,specimen_identification_new,
+                            ID_morph_and_PCR,taxa,family,stage, stage_QC_flag,comb_length,
+                            length_occurence,real_count,count,count.sum))
+env_larv_data<-full_join(larv, all_env_data,join_by("Site"=="Site"))#,relationship = "many-to-many") #want sites into larv since the focus is on larv
+env_larv<-env_larv_data%>%
+  mutate("specimen_identification_final"=ifelse(is.na(specimen_identification_new)==T,
+                                                "No billfish were recorded at this site",
+                                                specimen_identification_new))
 #selections for doublechecking######
-hand<-dplyr::select(specimen_join,c(Site, Year.y,Year.x, Cruise, station, data.source, vial_id, specimen_identification_new, stage, count,real_count, is_or_is, length_occurence, comb_length, paper_length_num, temp.is, sal.is,temp_fix, sal_fix, chla,ID_morph_and_PCR,))
-
-thirdcheck<-specimen_join%>%filter(Year.x<2020)%>%
-  rename("Year"=Year.x, "Cruise."=cruise, "Station."=station,"specimen_identification"=specimen_identification_new,
-                              "count."=real_count, "standard_length_mm"=comb_length,"temp_is"=temp.is,"sal_is"=sal.is,
-                               "chla_is"=chla, "species."=ID_morph_and_PCR)%>%
+thirdcheck<-env_larv%>%
+  filter(Year<=2022)%>%
+  #filter(consistent_with_product_1==T)%>%
+  distinct(specimen_identification_final,.keep_all=T)%>%
+  rename("specimen_identification"=specimen_identification_final,
+                              "standard_length_mm"=comb_length,"temp_is"=temp.is,"sal_is"=sal.is,
+                               "chla_is"=chla, "species"=ID_morph_and_PCR)%>%
+  mutate("density"=count/vol.m3)%>%
   dplyr::select(c(specimen_identification,
-                  species.,
-                  count,
+                  species,
+                  real_count,
                   standard_length_mm,
                   length_occurence,
                   stage,
                   Transect,
-                  Station.,
+                  Station,
                   Site,
-                  Cruise.,
+                  Cruise,
                   Year,
                   DateTime,
                   Date,
@@ -538,6 +591,7 @@ thirdcheck<-specimen_join%>%filter(Year.x<2020)%>%
                   Gear,
                   mesh,
                   vol.m3,
+                  density,
                   tow.length,
                   dist.shore,
                   tow.duration,
@@ -545,8 +599,33 @@ thirdcheck<-specimen_join%>%filter(Year.x<2020)%>%
                   day.night,
                   tow.speed.kts,
                   LAT_DD_end,
-                  LONG_DD_end, temp_is, sal_is, chla_is))
+                  LONG_DD_end,
+                  temp.1m,
+                  sal.1m,
+                  fluo.1m,
+                  #chla,
+                  chltot,
+                  TempC_data_source,
+                  Salinity_data_source,
+                  chla_data_source,
+                  CRW_SST,
+                  GLORYS_sal,
+                  chlor_8day,
+                  temp_is,
+                  sal_is,
+                  chla_is,
+                  #lunar_illumination,
+                  cat_moon,
+                  `consistent_with_product_1`))
 
+#write.csv(thirdcheck,("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/product3_2025_Jan28.csv"))
+#QC######
+check<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/product3_2025_Jan28.csv")
+submitted<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/Product 3_ Envrionmental Data Paired with Billfish Specimen Data.csv")
+discrep_larv<-anti_join(check, submitted, by=join_by("specimen_identification"==specimen_identification))
+discrep_site<-anti_join(check, submitted, by=join_by("Site"==Site))
+nrow(discrep_larv)
+nrow(discrep_site)
 
 #STILL UNDER CONSTRUCTION: 01/22/25: presence-absence data set#####
 #combo<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/combo_whip_slick_shortJan25.csv")
@@ -602,19 +681,24 @@ all_tows<-full
 
 
 #trying to get NAs to parse from tsg1 with time 11/27/25###########
-tsg2<-tsg1%>% 
-  mutate(datetime=ymd_hms(datetime),.keep="all")%>%
-  mutate(time5=ifelse(grepl("H",time),time,paste("00:",time)))%>%
-  separate_wider_delim(time5,"H", names = c("hours","minutesseconds"),too_few = "align_end")%>% #  mutate(time6=str_pad(as.character(time), 9, pad = "0","left"))%>%
-  mutate(Date=lubridate::ymd(Day))%>%
-  mutate(local_datetime=with_tz(datetime, "HST"))%>%##view time as HST to match combo data
-  mutate("minsec"=str_replace_all(minutesseconds,"[:alpha:]",":"))%>%
-  mutate("hourz"=str_pad(as.character(hours), 2, pad = "0","left"))%>%
-  unite("time2",c(hourz, minsec), sep=":")%>%
+#%>%
+  unite("time3",c(Date, time2),sep=" ")%>%
+  mutate("timey"=as.POSIXlt(time3, tz="HST", format="%Y-%m-%d %H:%M"))
+
+
+tsg2$time2
+#%>%
   mutate(time3=str_replace_all(time2," ", ""))%>%
   mutate(time3=str_replace_all(time3,"[:alpha:]",""))%>%
   mutate(time3=str_sub(time3, end=-2))%>%
   mutate(time3=str_remove(time3, "^:"))%>%
-  mutate(time4=str_replace_all(time3," ", ""))%>%
-  mutate(time6=str_pad(as.character(time4), 8, pad = "0","right"))%>%
-  as.POSIXlt(time6)
+  mutate(time4=str_replace_all(time3," ", ""))
+
+
+tsg2$time7 <- ifelse(nchar(tsg2$time4)<6, (str_sub(tsg2$time4, start = 4,end=3, omit_na = FALSE) <- "0"),tsg2$time4)
+tsg2$time7
+ifelse(nchar(tsg2$time7)<5,str_sub(tsg2$time4, start = 3, end = 3, omit_na = FALSE) <- ":0",tsg2$time4)
+tsg2<-tsg2%>%
+    mutate(time6=str_pad(as.character(time7), 8, pad = "0","right"))#%>%
+tsg2$time4
+tsg2$time6
