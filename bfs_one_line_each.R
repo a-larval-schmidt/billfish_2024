@@ -631,12 +631,54 @@ thirdcheck<-env_larv%>%
                   cat_moon,
                   `consistent_with_product_1`))%>%
   distinct(specimen_identification,.keep_all=T)
+#add in DO data from slicks project#####
+slick<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/422_edit_TransectMetadata_Whitneyetal2020_SuppTableS6 - Copy.csv") #couldnʻt figure out duration in R so did it in excel
+slick_var<-read.csv("C:/Users/Andrea.Schmidt/Desktop/for offline/SlickVariables_Compile_2016-2017_100tran_20181003.csv")
+slick<-slick %>%
+  mutate("Date"=mdy(Date)) %>%
+  mutate("tow.duration"=as.numeric(gsub(pattern="0:0",replacement="",duration, fixed=T)), .keep="unused")%>%# 8minfrom nature pub. Surface slick and ambient water neuston tows were conducted for ~8 min at a speed of ~4 km h−1.
+  mutate("DateTime"=mdy_hm(DateTime)) %>%
+  mutate("Time.start"= parse_time(str_pad(as.character(Time), 1, pad = "0"), "%H:%M"), .keep = "all")%>%
+  mutate("Time.end"= parse_time(str_pad(as.character(Time.end), 1, pad = "0"), "%H:%M"), .keep = "all")%>%
+  mutate("Time"= parse_time(str_pad(as.character(Time), 1, pad = "0"), "%H:%M"), .keep = "all")%>%
+  rename("LAT_DD_start"=Latitude) %>%
+  rename("LONG_DD_start"=Longitude) %>%
+  mutate("tow.depth.category"=ifelse(depth>-1,"surface","sub-surface"),.keep="all")%>%
+  mutate("Ship"=ifelse(Platform=="Ship (Sette)","Sette","Small Boat"))%>%
+  mutate("day.night"="day")%>%
+  mutate("tow.speed.kts"=(4/1.852))%>%#from nature pub, converted to knots
+  mutate("mesh"=ifelse(Platform== "Small Boat","335um","505um"))%>%
+  mutate("gear"=ifelse(Platform== "Small Boat","1m straight-conical ring-net","6'IK"))%>%
+  mutate("Sample"=sample, .keep="all")%>%
+  unite("transect_sample_habitat", c(Cruise,Transect,sample,Habitat), sep="_", remove=F)%>%
+  mutate("Station"=as.numeric(Sample),.keep="all")%>%
+  mutate("sample"= str_pad(as.character(sample), 3, side="left", pad = "0"))%>% 
+  unite("Site", c(Cruise, sample), sep="-", remove = F)
+missing_list<-c("LAT_DD_end","LONG_DD_end","LAT_DD_mid","LONG_DD_mid","Dist2Shore_km","distance","coord","end.lon","end.lat") 
+slick[,missing_list] <- NA
+str(slick_var)
+slick_var <-slick_var %>%
+  rename("Transect"=tran) %>%
+  rename("Site"=site)
+mini_slick<-slick%>%dplyr::select(Transect,Sample, Site)
+slick_var_do <-slick_var %>%dplyr::select(Transect,sample, oxmgl.1m,oxperc.1m,oxmgl.1.10,oxperc.1.10,oxmgl.1.5,
+                                          oxperc.1.5,oxmgl.diff.1m,oxperc.diff.1m, oxmgl.diff.1.10,oxperc.diff.1.10,oxmgl.diff.1.5,oxperc.diff.1.5)  
+slick_do_short<-full_join(mini_slick, slick_var_do, by = join_by(Transect, Sample==sample)) #join by transect number (not sample)
+str(slick_do_short)
+do<-slick_do_short%>%dplyr::select(!c(Transect, Sample))
+fin<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/product3_final_all_tow_types_saved140pm_post_disaster.csv")#_saved11am.csv")
+fr_this_time<-left_join(fin, do, by=join_by(Site))
+check<-filter(fr_this_time, !is.na(oxmgl.1m)) #only 3 sites with DO data :( )
 
-write.csv(thirdcheck,("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/product3_feb4.csv"))
+#write.csv(thirdcheck,("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/product3_withDO.csv"))
 #plotting#####
-fin<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/CSVproduct3_final_all_tow_types.csv")
+#fin<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/CSVproduct3_final_all_tow_types.csv")
+fin<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/product3_final_all_tow_types_saved140pm_post_disaster.csv")#_saved11am.csv")
+
 kona_map+geom_point(data=fin, aes(x=LONG_DD_start, y=LAT_DD_start, color=chla_is))+
   theme(legend.text = element_text(size=14))+scale_color_viridis_c(option="turbo")
+kona_map+geom_point(data=fin, aes(x=LONG_DD_start, y=LAT_DD_start, color=temp_is))+
+  theme(legend.text = element_text(size=14))+scale_color_viridis_c(option="turbo")+facet_grid(~species)
 
 nafin<-fin%>%filter(stage!="")
 nafin$stage <- factor(nafin$stage, levels=c("preflexion", "flexion", "post flexion"))
@@ -660,7 +702,14 @@ ex<-fin%>%filter(consistent_with_product_1==T)%>%
   filter(is.na(stage)==F)%>%
   filter(is.na(standard_length_mm)==F)
   
+finn<-fin%>%filter(sal.1m<34.6)
+ggplot(finn, aes(x=temp.1m, y=sal.1m, shape=species))+geom_point(size=3, alpha=0.6)+
+  facet_grid(~species)+
+  #scale_color_viridis_d()+
+  ylab("Salinity")+xlab("Temperature °C")+labs(color = "Species Identity")+
+  theme(axis.title = element_text(size=20),legend.title= element_text(size=20),legend.text = element_text(size=20))
 
+summary(as.numeric(fin$sal.1m))
 
 #was qc, but clearly not quality######
 og<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/downloaded_Feb2024_MASTER_BillfishInventory_WHIP+Slicks_Istiophoridae-Xiphiidae_Counts-Sizes_20240202.csv")
@@ -682,29 +731,48 @@ nrow(discrep_site)
 
 #QC emergencythe most original#########
 og<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/original_billfish_xiphiidae_counts.csv")
+og%>%summarize(sum(count))
 mas<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/bf_main_01222025.csv")
-mine<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/feb05_product3_final_all_tow_types.csv")
+mine<-read.csv("C:/Users/Andrea.Schmidt/Documents/billfish_not_github/product3_final_all_tow_types_saved140pm_post_disaster.csv")#_saved11am.csv")
 mine<-mine%>%filter(Year<=2020)
-#missing_in_mas<-anti_join(og, mas, by=join_by("sample"=="Site"))
-#missing_in_og<-anti_join(mas,og, by=join_by("Site"=="sample"))
 
 mine<-mine%>%
   mutate(count=1)%>%
-group_by(Site,species)%>%
+  group_by(species)%>%
+  #group_by(Site,species)%>%
   summarize(new_sum=sum(as.numeric(count), na.rm=T))
 
 og<-og%>%
-  mutate(taxa2=ifelse(taxa=="Unk.Istiophorid","Unk.Istiophoridae",taxa))%>%
+  mutate(taxa2=ifelse(taxa=="Unk.Istiophorid","Unk.Istiophoridae",ifelse(taxa=="Unknown","Unk.Istiophoridae",taxa)))%>%
+  #group_by(taxa2)%>%
   group_by(sample,taxa2)%>%
   summarize(og_sum=sum(count, na.rm=T))
 #by <- join_by(mas, within())
 q<-full_join(mine, og,by=join_by(Site==sample, species==taxa2))
-q<-q%>%
+
+bad<-q%>%
   #take difference between counts from og to mas
   mutate(disc=og_sum-new_sum)%>%
-  filter(disc!=0)%>%
-  filter(species!="Unk.Istiophoridae"|disc<0)%>%
+  filter(species!="Unk.Istiophoridae")%>%
   filter(disc>0)
+
+qq<-q%>%
+  #take difference between counts from og to mas
+  mutate(disc=og_sum-new_sum)%>%
+  #filter(species!="Unk.Istiophoridae")%>%
+  filter(disc!=0)%>%
+  filter(!is.na(disc))%>%
+  filter(disc>0)
+
+qqq<-qq%>%
+  filter(species!="Unk.Istiophoridae"&
+           disc>0)#%>%
+  #filter(species=="Unk.Istiophoridae"&disc<0)
+
+#filter(disc!=0)%>%
+  #filter(species!="Xiphias gladius")%>%
+  #filter(species!="Tetrapturus angustirostris")%>%
+  #filter(species=="Unk. Istiophoridae"|disc<0)
 #find difference: to see what needs to be changed from unk. to actually IDd
 #270 that were id
 
